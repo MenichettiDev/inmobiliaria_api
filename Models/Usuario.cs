@@ -52,6 +52,5 @@ namespace pyreApi.Models
         [ForeignKey("RolId")]
         public Rol Rol { get; set; } = null!;
 
-        public ICollection<Alerta> Alertas { get; set; } = new List<Alerta>();
     }
 }

@@ -115,7 +115,7 @@ builder.Services.AddSwaggerGen(options =>
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
-    options.IncludeXmlComments(xmlPath);
+    // options.IncludeXmlComments(xmlPath);
 });
 
 // Configurar base de datos
