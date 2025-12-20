@@ -1,0 +1,62 @@
+# ==========================================
+# Logs
+# ==========================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# Angular / Node
+# ==========================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Angular cache
+.angular/
+
+# ==========================================
+# .NET / Visual Studio
+# ==========================================
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.cache
+*.vspscc
+*.vssscc
+*.user
+*.suo
+*.dbmdl
+*.bak
+*.ldf
+*.mdf
+
+# Visual Studio folder
+.vs/
+
+# ASP.NET publish output
+publish/
+
+# ==========================================
+# IDEs / OS
+# ==========================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Otros
+# ==========================================
+*.ntvs*
+*.njsproj
+*.sln.docstates
+*.sw?
