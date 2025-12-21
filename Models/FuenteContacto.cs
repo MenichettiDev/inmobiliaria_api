@@ -1,11 +1,10 @@
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace pyreApi.Models
 {
-    [Table("roles")]
-    public class Rol
+    [Table("fuentes_contacto")]
+    public class FuenteContacto
     {
         [Key]
         public int Id { get; set; }
@@ -14,7 +13,7 @@ namespace pyreApi.Models
         [MaxLength(30)]
         public string Nombre { get; set; } = string.Empty;
 
-        public virtual ICollection<Usuario> Usuarios { get; set; } = new List<Usuario>();
+        // Navigation properties
+        public virtual ICollection<Lead> Leads { get; set; } = new List<Lead>();
     }
 }
-

@@ -72,10 +72,17 @@ builder.Services.AddEndpointsApiExplorer();
 //Repositorios
 builder.Services.AddScoped(typeof(GenericRepository<>));
 builder.Services.AddScoped<UsuarioRepository>();
+builder.Services.AddScoped<LeadRepository>();
 
 //Services
 builder.Services.AddScoped(typeof(GenericService<>));
 builder.Services.AddScoped<UsuarioService>();
+builder.Services.AddScoped<LeadService>();
+builder.Services.AddScoped<IUsoMensualService, UsoMensualService>();
+
+// Tenant Context - Multi-tenancy
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
 
 // Configurar Swagger
 builder.Services.AddSwaggerGen(options =>

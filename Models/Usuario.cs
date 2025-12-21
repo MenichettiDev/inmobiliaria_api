@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace pyreApi.Models
 {
+    [Table("usuarios")]
     public class Usuario
     {
         [Key]
@@ -10,47 +11,50 @@ namespace pyreApi.Models
 
         [Required]
         [MaxLength(100)]
-        public string? Nombre { get; set; }
+        public string Nombre { get; set; } = string.Empty;
 
-        [MaxLength(100)]
-        public string? Apellido { get; set; }
         [Required]
-        public String? Legajo { get; set; }
-
-        [MaxLength(20)]
-        public string? Dni { get; set; }
-
         [EmailAddress]
         [MaxLength(150)]
-        public string? Email { get; set; }
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        [Column("hash_contrasena")]
+        [MaxLength(255)]
+        public string HashContrasena { get; set; } = string.Empty;
 
         [MaxLength(50)]
         public string? Telefono { get; set; }
 
         [Required]
-        public int RolId { get; set; }
+        [Column("id_rol")]
+        public int IdRol { get; set; }
 
-        public bool AccedeAlSistema { get; set; } = true;
+        [Required]
+        [Column("id_inmobiliaria")]
+        public int IdInmobiliaria { get; set; }
 
+        [Column("id_estado")]
+        public int IdEstado { get; set; } = 1;
 
-        [MaxLength(45)]
-        public string? Avatar { get; set; }
+        [Column("creado_en")]
+        public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 
+        [Column("actualizado_en")]
+        public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 
-        public DateTime? FechaModificacion { get; set; }
-        public DateTime FechaRegistro { get; set; } = DateTime.Now;
+        // Navigation properties
+        [ForeignKey("IdRol")]
+        public virtual Rol? Rol { get; set; }
 
-        public int? IdUsuarioCrea { get; set; }
+        [ForeignKey("IdInmobiliaria")]
+        public virtual Inmobiliaria? Inmobiliaria { get; set; }
 
-        public int? IdUsuarioModifica { get; set; }
+        [ForeignKey("IdEstado")]
+        public virtual EstadoUsuario? Estado { get; set; }
 
-        [MaxLength(500)] // Añadir longitud máxima para el hash
-        public string? PasswordHash { get; set; }
-        public bool Activo { get; set; } = true;
-        public bool Eliminado { get; set; } = false;
-
-        [ForeignKey("RolId")]
-        public Rol Rol { get; set; } = null!;
-
+        public virtual ICollection<Lead> LeadsAsignados { get; set; } = new List<Lead>();
+        public virtual ICollection<Propiedad> PropiedadesResponsable { get; set; } = new List<Propiedad>();
+        public virtual ICollection<LeadEstadoHistorial> CambiosEstadoLead { get; set; } = new List<LeadEstadoHistorial>();
     }
 }
