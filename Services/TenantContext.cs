@@ -64,7 +64,7 @@ namespace inmobiliariaApi.Services
 
             // En un escenario real, esto debería estar en caché (Redis, Memory Cache, etc.)
             var inmobiliaria = _context.Inmobiliaria
-                .FirstOrDefault(i => i.Subdominio == subdomain && i.IdEstadoInmobiliaria == 1); // solo activas
+                .FirstOrDefault(i => i.Subdominio == subdomain && i.IdEstado == 1); // solo activas
 
             if (inmobiliaria == null)
                 throw new InvalidOperationException($"Inmobiliaria no encontrada para el subdominio: {subdomain}");
@@ -78,7 +78,7 @@ namespace inmobiliariaApi.Services
             var tenantId = GetCurrentTenantId();
             return await _context.Inmobiliaria
                 .Include(i => i.Plan)
-                .Include(i => i.EstadoInmobiliaria)
+                .Include(i => i.Estado)
                 .FirstOrDefaultAsync(i => i.Id == tenantId);
         }
     }

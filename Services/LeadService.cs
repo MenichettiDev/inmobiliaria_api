@@ -294,11 +294,13 @@ namespace inmobiliariaApi.Services
 
                 var paginatedResponse = new PaginatedResponseDto<LeadResponseDto>
                 {
-                    Items = leadsDto,
-                    TotalCount = totalCount,
+                    Data = leadsDto,
+                    TotalRecords = totalCount,
                     Page = filtros.Page,
                     PageSize = filtros.PageSize,
-                    TotalPages = (int)Math.Ceiling((double)totalCount / filtros.PageSize)
+                    TotalPages = (int)Math.Ceiling((double)totalCount / filtros.PageSize),
+                    HasNextPage = filtros.Page < (int)Math.Ceiling((double)totalCount / filtros.PageSize),
+                    HasPreviousPage = filtros.Page > 1
                 };
 
                 return new BaseResponseDto<PaginatedResponseDto<LeadResponseDto>>

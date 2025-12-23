@@ -23,3 +23,7 @@ namespace inmobiliariaApi.Models
         public virtual ICollection<Inmobiliaria> Inmobiliarias { get; set; } = new List<Inmobiliaria>();
     }
 }
+
+// 1	activa	Inmobiliaria operativa	1
+// 2	suspendida	Suspendida por falta de pago o incumplimiento	1
+// 3	cancelada	Cuenta cerrada definitivamente	1

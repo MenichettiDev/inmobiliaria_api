@@ -224,7 +224,8 @@ namespace inmobiliariaApi.Repositories
             }
 
             entity.ActualizadoEn = DateTime.UtcNow;
-            return await base.UpdateAsync(entity);
+            await base.UpdateAsync(entity);
+            return entity;
         }
     }
 }

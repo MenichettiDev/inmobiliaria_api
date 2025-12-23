@@ -10,7 +10,7 @@ namespace inmobiliariaApi.Data
 
         // Mapeo de entidades con los nombres correctos según la base de datos
         public DbSet<Usuario> Usuario { get; set; }
-        public DbSet<Imagen> Imagen { get; set; }
+        public DbSet<ImagenPropiedad> ImagenPropiedad { get; set; }
         public DbSet<Rol> Rol { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
 
@@ -26,7 +26,6 @@ namespace inmobiliariaApi.Data
         public DbSet<EstadoLeadAdmin> EstadoLeadAdmin { get; set; }
         public DbSet<EstadoPropiedadOperativo> EstadoPropiedadOperativo { get; set; }
         public DbSet<EstadoPropiedadActividad> EstadoPropiedadActividad { get; set; }
-        public DbSet<ImagenPropiedad> ImagenPropiedad { get; set; }
         public DbSet<LeadEstadoHistorial> LeadEstadoHistorial { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones
@@ -35,7 +34,7 @@ namespace inmobiliariaApi.Data
 
             // Mapear tablas existentes
             modelBuilder.Entity<Usuario>().ToTable("usuarios");
-            modelBuilder.Entity<Imagen>().ToTable("imagen");
+            modelBuilder.Entity<ImagenPropiedad>().ToTable("imagenes_propiedades");
             modelBuilder.Entity<Rol>().ToTable("roles");
 
             // Mapeo de nuevas tablas para módulo de Leads - Ya configurado con [Table] attributes

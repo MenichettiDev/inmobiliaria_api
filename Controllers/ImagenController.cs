@@ -23,7 +23,7 @@ namespace inmobiliariaApi.Controllers
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos los roles pueden ver imágenes
         public async Task<IActionResult> GetImagenes()
         {
-            var imagenes = await _context.Imagen.ToListAsync();
+            var imagenes = await _context.ImagenPropiedad.ToListAsync();
             var totalImagenes = imagenes.Count;
 
             return Ok(
@@ -34,17 +34,17 @@ namespace inmobiliariaApi.Controllers
                         ? "Lista de imágenes obtenida correctamente."
                         : "No hay imágenes disponibles.",
                     totalImagenes,
-                    imagenes = imagenes ?? new List<Imagen>(), // esto es para evitar nulls
+                    imagenes = imagenes ?? new List<ImagenPropiedad>(), // esto es para evitar nulls
                 }
             );
         }
 
-        // GET: api/imagen/{idImagen} (Una imagen específica)
-        [HttpGet("{idImagen}")]
+        // GET: api/imagen/{id} (Una imagen específica)
+        [HttpGet("{id}")]
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos los roles pueden ver imágenes específicas
-        public async Task<IActionResult> GetImagen(int idImagen)
+        public async Task<IActionResult> GetImagen(int id)
         {
-            var imagen = await _context.Imagen.FindAsync(idImagen);
+            var imagen = await _context.ImagenPropiedad.FindAsync(id);
             if (imagen == null)
             {
                 return NotFound(
@@ -70,9 +70,9 @@ namespace inmobiliariaApi.Controllers
         // POST: api/imagen (Subir nueva imagen)
         [HttpPost]
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos los roles pueden subir imágenes
-        public async Task<IActionResult> PostImagen(Imagen imagen)
+        public async Task<IActionResult> PostImagen(ImagenPropiedad imagen)
         {
-            if (string.IsNullOrEmpty(imagen.Ruta))
+            if (string.IsNullOrEmpty(imagen.Url))
             {
                 return BadRequest(
                     new
@@ -84,13 +84,13 @@ namespace inmobiliariaApi.Controllers
                 );
             }
 
-            imagen.IdImagen = 0; // Aseguramos que la DB genere el ID automáticamente
-            _context.Imagen.Add(imagen);
+            imagen.Id = 0; // Aseguramos que la DB genere el ID automáticamente
+            _context.ImagenPropiedad.Add(imagen);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(
                 nameof(GetImagen),
-                new { idImagen = imagen.IdImagen },
+                new { id = imagen.Id },
                 new
                 {
                     status = 201,
@@ -100,12 +100,12 @@ namespace inmobiliariaApi.Controllers
             );
         }
 
-        // PUT: api/imagen/{idImagen} (Actualizar imagen)
-        [HttpPut("{idImagen}")]
+        // PUT: api/imagen/{id} (Actualizar imagen)
+        [HttpPut("{id}")]
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos los roles pueden actualizar imágenes
-        public async Task<IActionResult> PutImagen(int idImagen, Imagen imagen)
+        public async Task<IActionResult> PutImagen(int id, ImagenPropiedad imagen)
         {
-            if (idImagen != imagen.IdImagen)
+            if (id != imagen.Id)
             {
                 return BadRequest(
                     new
@@ -125,7 +125,7 @@ namespace inmobiliariaApi.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!_context.Imagen.Any(e => e.IdImagen == idImagen))
+                if (!_context.ImagenPropiedad.Any(e => e.Id == id))
                 {
                     return NotFound(
                         new
@@ -149,12 +149,12 @@ namespace inmobiliariaApi.Controllers
             );
         }
 
-        // DELETE: api/imagen/{idImagen} (Eliminar imagen)
-        [HttpDelete("{idImagen}")]
+        // DELETE: api/imagen/{id} (Eliminar imagen)
+        [HttpDelete("{id}")]
         [Authorize(Roles = "SuperAdmin")] // Solo SuperAdmin puede eliminar imágenes
-        public async Task<IActionResult> DeleteImagen(int idImagen)
+        public async Task<IActionResult> DeleteImagen(int id)
         {
-            var existeImagen = await _context.Imagen.AnyAsync(i => i.IdImagen == idImagen);
+            var existeImagen = await _context.ImagenPropiedad.AnyAsync(i => i.Id == id);
             if (!existeImagen)
             {
                 return NotFound(
@@ -167,12 +167,12 @@ namespace inmobiliariaApi.Controllers
                 );
             }
 
-            var imagen = await _context.Imagen.FindAsync(idImagen);
+            var imagen = await _context.ImagenPropiedad.FindAsync(id);
             if (imagen == null)
             {
                 return NotFound(new { status = 404, message = "Imagen no encontrada." });
             }
-            _context.Imagen.Remove(imagen);
+            _context.ImagenPropiedad.Remove(imagen);
             await _context.SaveChangesAsync();
 
             return Ok(
@@ -180,7 +180,7 @@ namespace inmobiliariaApi.Controllers
                 {
                     status = 200,
                     message = "Imagen eliminada correctamente.",
-                    imagenEliminadaId = idImagen,
+                    imagenEliminadaId = id,
                     detalles = "No hay referencias activas, eliminación exitosa.",
                 }
             );

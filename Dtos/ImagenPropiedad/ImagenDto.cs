@@ -1,4 +1,4 @@
-namespace inmobiliariaApi.DTOs.Imagen
+namespace inmobiliariaApi.DTOs.ImagenPropiedad
 {
     public class ImagenDto
     {

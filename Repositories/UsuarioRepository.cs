@@ -12,13 +12,11 @@ namespace inmobiliariaApi.Repositories
     {
         private readonly ILogger<UsuarioRepository> _logger;
         private readonly IConfiguration _configuration;
-        private readonly ApplicationDbContext _dbContext; // Agregado el contexto de base de datos
 
         public UsuarioRepository(ApplicationDbContext context, ILogger<UsuarioRepository> logger, IConfiguration configuration) : base(context)
         {
             _logger = logger;
             _configuration = configuration;
-            _dbContext = context; // Inicializando el contexto
         }
 
         public async Task<Usuario?> GetByEmailAsync(string email)
@@ -26,48 +24,28 @@ namespace inmobiliariaApi.Repositories
             return await _dbSet.FirstOrDefaultAsync(u => u.Email == email);
         }
 
-        public async Task<Usuario?> GetByLegajoAsync(string legajo)
-        {
-            // Validar longitud del legajo
-            if (!string.IsNullOrEmpty(legajo) && legajo.Length > 5)
-            {
-                _logger.LogWarning("Intento de búsqueda con legajo que excede 5 caracteres: {Legajo}", legajo);
-                return null;
-            }
-
-            return await _dbSet.FirstOrDefaultAsync(u => u.Legajo == legajo);
-        }
-
-        public async Task<Usuario?> GetByDniAsync(string dni)
-        {
-            return await _dbSet.FirstOrDefaultAsync(u => u.Dni == dni);
-        }
-
         public async Task<IEnumerable<Usuario>> GetByRolAsync(int rolId)
         {
-            return await _dbSet.Where(u => u.RolId == rolId).ToListAsync();
+            return await _dbSet.Where(u => u.IdRol == rolId).ToListAsync();
         }
 
         public async Task<IEnumerable<Usuario>> GetAllWithRolAsync()
         {
             try
             {
-                var usuarios = await _context.Usuarios
+                var usuarios = await _context.Usuario
                     .Include(u => u.Rol)
                     .Select(u => new Usuario
                     {
                         Id = u.Id,
                         Nombre = u.Nombre,
-                        Apellido = u.Apellido,
-                        Legajo = u.Legajo,
-                        Dni = u.Dni,
                         Email = u.Email,
                         Telefono = u.Telefono,
-                        AccedeAlSistema = u.AccedeAlSistema,
-                        Activo = u.Activo,
-                        Avatar = u.Avatar,
-                        FechaRegistro = u.FechaRegistro,
-                        FechaModificacion = u.FechaModificacion ?? DateTime.MinValue, // Manejo de nulos
+                        IdRol = u.IdRol,
+                        IdInmobiliaria = u.IdInmobiliaria,
+                        IdEstado = u.IdEstado,
+                        CreadoEn = u.CreadoEn,
+                        ActualizadoEn = u.ActualizadoEn,
                         Rol = u.Rol
                     })
                     .ToListAsync();
@@ -98,7 +76,7 @@ namespace inmobiliariaApi.Repositories
                     return false;
                 }
 
-                var usuario = await _context.Usuarios
+                var usuario = await _context.Usuario
                     .FirstOrDefaultAsync(u => u.Email == email);
 
                 if (usuario == null)
@@ -126,19 +104,14 @@ namespace inmobiliariaApi.Repositories
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error crítico al validar credenciales para legajo: {Legajo}", legajo);
+                _logger.LogError(ex, "Error crítico al validar credenciales para email: {Email}", email);
                 return false;
             }
         }
 
         public async Task<IEnumerable<Usuario>> GetActiveUsersAsync()
         {
-            return await _dbSet.Where(u => u.Activo == true).ToListAsync();
-        }
-
-        public async Task<IEnumerable<Usuario>> GetUsersWithSystemAccessAsync()
-        {
-            return await _dbSet.Where(u => u.AccedeAlSistema == true && u.Activo == true).ToListAsync();
+            return await _dbSet.Where(u => u.IdEstado == 1).ToListAsync();
         }
 
         public async Task<Usuario?> GetByEmailWithRolAsync(string email)
@@ -153,7 +126,7 @@ namespace inmobiliariaApi.Repositories
 
                 _logger.LogInformation("Buscando usuario por email: {Email}", email);
 
-                var usuario = await _context.Usuarios
+                var usuario = await _context.Usuario
                     .Include(u => u.Rol)
                     .FirstOrDefaultAsync(u => u.Email == email);
 
@@ -164,7 +137,7 @@ namespace inmobiliariaApi.Repositories
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error crítico al buscar usuario por legajo: {Legajo}", legajo);
+                _logger.LogError(ex, "Error crítico al buscar usuario por email: {Email}", email);
                 throw;
             }
         }
@@ -179,34 +152,6 @@ namespace inmobiliariaApi.Repositories
                 .ToListAsync();
 
             return (data, totalRecords);
-        }
-
-        public async Task<IEnumerable<Usuario>> GetFilteredUsuariosAsync(
-            string? legajo, bool? estado, string? nombre, string? apellido, int? rolId)
-        {
-            var query = _dbContext.Set<Usuario>()
-                .Include(u => u.Rol) // Asegurarse de incluir la relación con Rol
-                .AsQueryable();
-
-            query = query.Where(u => u.Eliminado == false);
-
-            if (!string.IsNullOrWhiteSpace(legajo))
-                query = query.Where(u => u.Legajo != null && u.Legajo.Contains(legajo));
-
-            if (estado.HasValue)
-                query = query.Where(u => u.Activo == estado.Value);
-
-            if (!string.IsNullOrWhiteSpace(nombre))
-                query = query.Where(u => u.Nombre != null && u.Nombre.Contains(nombre));
-
-            if (!string.IsNullOrWhiteSpace(apellido))
-                query = query.Where(u => u.Apellido != null && u.Apellido.Contains(apellido));
-
-            if (rolId.HasValue)
-                query = query.Where(u => u.RolId == rolId.Value);
-
-            // Ordenar siempre por Id
-            return await query.OrderBy(u => u.Id).ToListAsync();
         }
 
         // Método auxiliar para verificar contraseña usando KeyDerivation
@@ -242,7 +187,7 @@ namespace inmobiliariaApi.Repositories
 
         public async Task<bool> ValidateUserPasswordAsync(int userId, string password)
         {
-            var usuario = await _context.Usuarios.FindAsync(userId);
+            var usuario = await _context.Usuario.FindAsync(userId);
             if (usuario == null || string.IsNullOrEmpty(usuario.HashContrasena))
                 return false;
 

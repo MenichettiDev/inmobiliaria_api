@@ -114,8 +114,7 @@ namespace inmobiliariaApi.Services
                 if (page <= 0) page = 1;
                 if (pageSize <= 0) pageSize = 10;
 
-                var (usuarios, totalRecords) = await _usuarioRepository.GetAllWithRolPagedAsync(
-                    page, pageSize, nombre, rolId, inmobiliariaId, estadoId);
+                var (usuarios, totalRecords) = await _usuarioRepository.GetAllWithRolPagedAsync(page, pageSize);
 
                 var usuariosDto = usuarios.Select(MapToResponseDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
