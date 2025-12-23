@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using pyreApi.Data;
+using inmobiliariaApi.Data;
 using System.Linq.Expressions;
 
-namespace pyreApi.Repositories
+namespace inmobiliariaApi.Repositories
 {
     public class GenericRepository<T> where T : class
     {

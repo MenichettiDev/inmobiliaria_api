@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using pyreApi.Data;
-using pyreApi.Models;
-using pyreApi.Services;
-using pyreApi.Exceptions;
-using pyreApi.DTOs.Lead;
+using inmobiliariaApi.Data;
+using inmobiliariaApi.Models;
+using inmobiliariaApi.Services;
+using inmobiliariaApi.Exceptions;
+using inmobiliariaApi.DTOs.Lead;
 using System.Linq.Expressions;
 
-namespace pyreApi.Repositories
+namespace inmobiliariaApi.Repositories
 {
     public class LeadRepository : GenericRepository<Lead>
     {
@@ -25,7 +25,7 @@ namespace pyreApi.Repositories
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin != 3) // No eliminados
                 .Include(l => l.Propiedad)
-                .Include(l => l.FuenteContacto)
+                .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
                 .ToListAsync();
@@ -37,11 +37,10 @@ namespace pyreApi.Repositories
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId && l.Id == id && l.IdEstadoAdmin != 3)
                 .Include(l => l.Propiedad)
-                .Include(l => l.FuenteContacto)
+                .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
-                .Include(l => l.UsuarioCrea)
-                .Include(l => l.UsuarioModifica)
+                .Include(l => l.EstadoAdmin)
                 .FirstOrDefaultAsync();
         }
 
@@ -57,8 +56,7 @@ namespace pyreApi.Repositories
                 return null;
 
             lead.IdEstado = nuevoEstadoId;
-            lead.FechaUltimaInteraccion = DateTime.UtcNow;
-            lead.FechaModificacion = DateTime.UtcNow;
+            lead.ActualizadoEn = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             return lead;
@@ -71,11 +69,10 @@ namespace pyreApi.Repositories
             var query = _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin != 3)
                 .Include(l => l.Propiedad)
-                .Include(l => l.FuenteContacto)
+                .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
-                .Include(l => l.UsuarioCrea)
-                .Include(l => l.UsuarioModifica)
+                .Include(l => l.EstadoAdmin)
                 .AsQueryable();
 
             // Aplicar filtros
@@ -99,9 +96,9 @@ namespace pyreApi.Repositories
                 query = query.Where(l => l.IdEstado == filtros.IdEstado.Value);
             }
 
-            if (filtros.IdFuenteContacto.HasValue)
+            if (filtros.IdFuente.HasValue)
             {
-                query = query.Where(l => l.IdFuenteContacto == filtros.IdFuenteContacto.Value);
+                query = query.Where(l => l.IdFuente == filtros.IdFuente.Value);
             }
 
             if (filtros.IdUsuarioAsignado.HasValue)
@@ -116,37 +113,12 @@ namespace pyreApi.Repositories
 
             if (filtros.FechaDesde.HasValue)
             {
-                query = query.Where(l => l.FechaContacto >= filtros.FechaDesde.Value);
+                query = query.Where(l => l.CreadoEn >= filtros.FechaDesde.Value);
             }
 
             if (filtros.FechaHasta.HasValue)
             {
-                query = query.Where(l => l.FechaContacto <= filtros.FechaHasta.Value.AddDays(1));
-            }
-
-            if (filtros.PuntuacionMinima.HasValue)
-            {
-                query = query.Where(l => l.Puntuacion >= filtros.PuntuacionMinima.Value);
-            }
-
-            if (filtros.PuntuacionMaxima.HasValue)
-            {
-                query = query.Where(l => l.Puntuacion <= filtros.PuntuacionMaxima.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(filtros.TipoOperacion))
-            {
-                query = query.Where(l => l.TipoOperacionInteres == filtros.TipoOperacion);
-            }
-
-            if (filtros.PresupuestoMinimo.HasValue)
-            {
-                query = query.Where(l => l.PresupuestoMaximo == null || l.PresupuestoMaximo >= filtros.PresupuestoMinimo.Value);
-            }
-
-            if (filtros.PresupuestoMaximo.HasValue)
-            {
-                query = query.Where(l => l.PresupuestoMinimo == null || l.PresupuestoMinimo <= filtros.PresupuestoMaximo.Value);
+                query = query.Where(l => l.CreadoEn <= filtros.FechaHasta.Value.AddDays(1));
             }
 
             // Contar total antes de paginación
@@ -157,10 +129,11 @@ namespace pyreApi.Repositories
             {
                 switch (filtros.OrderBy.ToLower())
                 {
-                    case "fechacontacto":
+                    case "creado_en":
+                    case "fecha":
                         query = filtros.OrderDescending
-                            ? query.OrderByDescending(l => l.FechaContacto)
-                            : query.OrderBy(l => l.FechaContacto);
+                            ? query.OrderByDescending(l => l.CreadoEn)
+                            : query.OrderBy(l => l.CreadoEn);
                         break;
                     case "nombre":
                     case "nombrecompleto":
@@ -173,15 +146,10 @@ namespace pyreApi.Repositories
                             ? query.OrderByDescending(l => l.Estado!.Nombre)
                             : query.OrderBy(l => l.Estado!.Nombre);
                         break;
-                    case "puntuacion":
+                    default: // creado_en por defecto
                         query = filtros.OrderDescending
-                            ? query.OrderByDescending(l => l.Puntuacion)
-                            : query.OrderBy(l => l.Puntuacion);
-                        break;
-                    default: // fechacreacion
-                        query = filtros.OrderDescending
-                            ? query.OrderByDescending(l => l.FechaCreacion)
-                            : query.OrderBy(l => l.FechaCreacion);
+                            ? query.OrderByDescending(l => l.CreadoEn)
+                            : query.OrderBy(l => l.CreadoEn);
                         break;
                 }
             }
@@ -203,8 +171,8 @@ namespace pyreApi.Repositories
 
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId &&
-                           l.FechaCreacion >= startDate &&
-                           l.FechaCreacion < endDate &&
+                           l.CreadoEn >= startDate &&
+                           l.CreadoEn < endDate &&
                            l.IdEstadoAdmin != 3)
                 .CountAsync();
         }
@@ -227,17 +195,36 @@ namespace pyreApi.Repositories
 
             var tenantId = _tenantContext.GetCurrentTenantId();
             return await _context.Usuario
-                .AnyAsync(u => u.Id == usuarioId.Value && u.IdInmobiliaria == tenantId && u.Activo);
+                .AnyAsync(u => u.Id == usuarioId.Value && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
         }
 
-        public override async Task<Lead> CreateAsync(Lead entity)
+        public override async Task<Lead> AddAsync(Lead entity)
         {
             // Asegurar que el lead pertenece al tenant actual
             entity.IdInmobiliaria = _tenantContext.GetCurrentTenantId();
             entity.IdEstadoAdmin = 1; // Activo por defecto
             entity.IdEstado = entity.IdEstado == 0 ? 1 : entity.IdEstado; // Nuevo por defecto
 
-            return await base.CreateAsync(entity);
+            return await base.AddAsync(entity);
+        }
+
+        // Agregar método CreateAsync para compatibilidad
+        public async Task<Lead> CreateAsync(Lead entity)
+        {
+            return await AddAsync(entity);
+        }
+
+        // Agregar método UpdateAsync para compatibilidad con el servicio
+        public override async Task<Lead> UpdateAsync(Lead entity)
+        {
+            var tenantId = _tenantContext.GetCurrentTenantId();
+            if (entity.IdInmobiliaria != tenantId)
+            {
+                throw new UnauthorizedAccessException("No se puede modificar un lead que no pertenece al tenant actual");
+            }
+
+            entity.ActualizadoEn = DateTime.UtcNow;
+            return await base.UpdateAsync(entity);
         }
     }
 }

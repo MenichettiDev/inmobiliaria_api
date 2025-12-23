@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using pyreApi.DTOs.Lead;
-using pyreApi.Services;
-using pyreApi.Extensions;
+using inmobiliariaApi.DTOs.Lead;
+using inmobiliariaApi.Services;
+using inmobiliariaApi.Extensions;
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -242,12 +242,7 @@ namespace pyreApi.Controllers
                 });
             }
 
-            // Cambiar estado admin a "eliminado" (3)
-            var response = await _leadService.ActualizarEstadoConHistorialAsync(
-                id,
-                3, // Estado eliminado
-                usuarioId.Value,
-                "Lead eliminado por el usuario");
+            var response = await _leadService.EliminarLeadAsync(id, usuarioId.Value);
 
             if (!response.Success)
             {
@@ -256,11 +251,7 @@ namespace pyreApi.Controllers
                 return BadRequest(response);
             }
 
-            return Ok(new
-            {
-                Success = true,
-                Message = "Lead eliminado exitosamente"
-            });
+            return Ok(response);
         }
 
         /// <summary>

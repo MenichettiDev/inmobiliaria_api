@@ -1,8 +1,8 @@
-using pyreApi.DTOs.Common;
-using pyreApi.Repositories;
+using inmobiliariaApi.DTOs.Common;
+using inmobiliariaApi.Repositories;
 using System.Linq.Expressions;
 
-namespace pyreApi.Services
+namespace inmobiliariaApi.Services
 {
     public class GenericService<T> where T : class
     {

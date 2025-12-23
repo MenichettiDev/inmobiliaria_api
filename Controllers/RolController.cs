@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using pyreApi.DTOs.Rol;
-using pyreApi.Services;
+using inmobiliariaApi.DTOs.Rol;
+using inmobiliariaApi.Services;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]

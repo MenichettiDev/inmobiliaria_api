@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Usuario
+namespace inmobiliariaApi.DTOs.Usuario
 {
     public class ChangePasswordDto
     {

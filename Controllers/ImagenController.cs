@@ -1,10 +1,10 @@
-using pyreApi.Data;
-using pyreApi.Models;
+using inmobiliariaApi.Data;
+using inmobiliariaApi.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

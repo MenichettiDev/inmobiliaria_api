@@ -1,4 +1,4 @@
-namespace pyreApi.DTOs.Common
+namespace inmobiliariaApi.DTOs.Common
 {
     public class BaseResponseDto
     {

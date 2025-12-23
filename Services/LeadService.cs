@@ -1,13 +1,13 @@
-using pyreApi.DTOs.Common;
-using pyreApi.DTOs.Lead;
-using pyreApi.Models;
-using pyreApi.Repositories;
-using pyreApi.Services;
-using pyreApi.Exceptions;
-using pyreApi.Data;
+using inmobiliariaApi.DTOs.Common;
+using inmobiliariaApi.DTOs.Lead;
+using inmobiliariaApi.Models;
+using inmobiliariaApi.Repositories;
+using inmobiliariaApi.Services;
+using inmobiliariaApi.Exceptions;
+using inmobiliariaApi.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace pyreApi.Services
+namespace inmobiliariaApi.Services
 {
     public class LeadService : GenericService<Lead>
     {
@@ -53,7 +53,7 @@ namespace pyreApi.Services
 
                 // Validar que la fuente de contacto existe
                 var fuenteExists = await _context.FuenteContacto
-                    .AnyAsync(f => f.Id == createLeadDto.IdFuenteContacto && f.Activo);
+                    .AnyAsync(f => f.Id == createLeadDto.IdFuente);
                 if (!fuenteExists)
                 {
                     return new BaseResponseDto<LeadResponseDto>
@@ -75,33 +75,27 @@ namespace pyreApi.Services
                         Email = createLeadDto.Email,
                         Telefono = createLeadDto.Telefono,
                         Mensaje = createLeadDto.Mensaje,
-                        DireccionInteres = createLeadDto.DireccionInteres,
-                        PresupuestoMinimo = createLeadDto.PresupuestoMinimo,
-                        PresupuestoMaximo = createLeadDto.PresupuestoMaximo,
-                        TipoOperacionInteres = createLeadDto.TipoOperacionInteres,
                         IdPropiedad = createLeadDto.IdPropiedad,
-                        IdFuenteContacto = createLeadDto.IdFuenteContacto,
-                        Notas = createLeadDto.Notas,
-                        Puntuacion = createLeadDto.Puntuacion,
-                        IdUsuarioCrea = usuarioId,
+                        IdFuente = createLeadDto.IdFuente,
                         IdEstado = 1, // Nuevo por defecto
-                        FechaContacto = DateTime.UtcNow
+                        CreadoEn = DateTime.UtcNow,
+                        ActualizadoEn = DateTime.UtcNow
                     };
 
-                    var leadCreado = await _leadRepository.CreateAsync(lead);
+                    var leadCreado = await _leadRepository.AddAsync(lead);
 
                     // Crear historial inicial
-                    var historial = new HistorialEstadoLead
+                    var historial = new LeadEstadoHistorial
                     {
                         IdLead = leadCreado.Id,
                         IdEstadoAnterior = 0, // Sin estado anterior
                         IdEstadoNuevo = 1, // Nuevo
                         IdUsuario = usuarioId,
                         Comentario = "Lead creado desde formulario",
-                        FechaCambio = DateTime.UtcNow
+                        CreadoEn = DateTime.UtcNow
                     };
 
-                    _context.HistorialEstadoLead.Add(historial);
+                    _context.LeadEstadoHistorial.Add(historial);
                     await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
@@ -180,9 +174,7 @@ namespace pyreApi.Services
                 }
 
                 lead.IdUsuarioAsignado = usuarioId;
-                lead.FechaUltimaInteraccion = DateTime.UtcNow;
-                lead.FechaModificacion = DateTime.UtcNow;
-                lead.IdUsuarioModifica = usuarioActualId;
+                lead.ActualizadoEn = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
@@ -226,16 +218,16 @@ namespace pyreApi.Services
                     };
                 }
 
-                // Validar que el estado existe
+                // Validar que el estado existe (EstadoLead no tiene campo Activo)
                 var estadoExists = await _context.EstadoLead
-                    .AnyAsync(e => e.Id == nuevoEstadoId && e.Activo);
+                    .AnyAsync(e => e.Id == nuevoEstadoId);
                 if (!estadoExists)
                 {
                     return new BaseResponseDto<LeadResponseDto>
                     {
                         Success = false,
                         Message = "Estado no válido",
-                        Errors = new List<string> { "El estado especificado no existe o no está activo" }
+                        Errors = new List<string> { "El estado especificado no existe" }
                     };
                 }
 
@@ -247,22 +239,20 @@ namespace pyreApi.Services
 
                     // Actualizar estado del lead
                     lead.IdEstado = nuevoEstadoId;
-                    lead.FechaUltimaInteraccion = DateTime.UtcNow;
-                    lead.FechaModificacion = DateTime.UtcNow;
-                    lead.IdUsuarioModifica = usuarioId;
+                    lead.ActualizadoEn = DateTime.UtcNow;
 
                     // Crear historial
-                    var historial = new HistorialEstadoLead
+                    var historial = new LeadEstadoHistorial
                     {
                         IdLead = leadId,
                         IdEstadoAnterior = estadoAnterior,
                         IdEstadoNuevo = nuevoEstadoId,
                         IdUsuario = usuarioId,
                         Comentario = comentario ?? $"Cambio automático de estado",
-                        FechaCambio = DateTime.UtcNow
+                        CreadoEn = DateTime.UtcNow
                     };
 
-                    _context.HistorialEstadoLead.Add(historial);
+                    _context.LeadEstadoHistorial.Add(historial);
                     await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
@@ -378,17 +368,10 @@ namespace pyreApi.Services
                 lead.Email = updateLeadDto.Email;
                 lead.Telefono = updateLeadDto.Telefono;
                 lead.Mensaje = updateLeadDto.Mensaje;
-                lead.DireccionInteres = updateLeadDto.DireccionInteres;
-                lead.PresupuestoMinimo = updateLeadDto.PresupuestoMinimo;
-                lead.PresupuestoMaximo = updateLeadDto.PresupuestoMaximo;
-                lead.TipoOperacionInteres = updateLeadDto.TipoOperacionInteres;
                 lead.IdPropiedad = updateLeadDto.IdPropiedad;
-                lead.IdFuenteContacto = updateLeadDto.IdFuenteContacto;
-                lead.Notas = updateLeadDto.Notas;
-                lead.Puntuacion = updateLeadDto.Puntuacion;
+                lead.IdFuente = updateLeadDto.IdFuente;
                 lead.IdUsuarioAsignado = updateLeadDto.IdUsuarioAsignado;
-                lead.FechaModificacion = DateTime.UtcNow;
-                lead.IdUsuarioModifica = usuarioId;
+                lead.ActualizadoEn = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
@@ -413,6 +396,106 @@ namespace pyreApi.Services
             }
         }
 
+        public async Task<BaseResponseDto<LeadResponseDto>> GetByIdAsync(int id)
+        {
+            try
+            {
+                var lead = await _leadRepository.GetByIdAsync(id);
+                if (lead == null)
+                {
+                    return new BaseResponseDto<LeadResponseDto>
+                    {
+                        Success = false,
+                        Message = "Lead no encontrado",
+                        Errors = new List<string> { $"No existe lead con ID {id}" }
+                    };
+                }
+
+                var responseDto = MapToResponseDto(lead);
+
+                return new BaseResponseDto<LeadResponseDto>
+                {
+                    Success = true,
+                    Data = responseDto,
+                    Message = "Lead obtenido exitosamente"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponseDto<LeadResponseDto>
+                {
+                    Success = false,
+                    Message = "Error al obtener el lead",
+                    Errors = new List<string> { ex.Message }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<LeadResponseDto>> EliminarLeadAsync(int leadId, int usuarioId)
+        {
+            try
+            {
+                var lead = await _leadRepository.GetByIdAsync(leadId);
+                if (lead == null)
+                {
+                    return new BaseResponseDto<LeadResponseDto>
+                    {
+                        Success = false,
+                        Message = "Lead no encontrado",
+                        Errors = new List<string> { $"No existe lead con ID {leadId}" }
+                    };
+                }
+
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    // Actualizar estado admin a eliminado (3)
+                    lead.IdEstadoAdmin = 3; // eliminado
+                    lead.ActualizadoEn = DateTime.UtcNow;
+
+                    // Crear historial de cambio de estado admin
+                    var historial = new LeadEstadoHistorial
+                    {
+                        IdLead = leadId,
+                        IdEstadoAnterior = lead.IdEstado,
+                        IdEstadoNuevo = lead.IdEstado, // Mantener el mismo estado de lead
+                        IdUsuario = usuarioId,
+                        Comentario = "Lead marcado como eliminado por el usuario",
+                        CreadoEn = DateTime.UtcNow
+                    };
+
+                    _context.LeadEstadoHistorial.Add(historial);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    var responseDto = MapToResponseDto(lead);
+
+                    return new BaseResponseDto<LeadResponseDto>
+                    {
+                        Success = true,
+                        Data = responseDto,
+                        Message = "Lead eliminado exitosamente"
+                    };
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponseDto<LeadResponseDto>
+                {
+                    Success = false,
+                    Message = "Error al eliminar el lead",
+                    Errors = new List<string> { ex.Message }
+                };
+            }
+        }
+
         private static LeadResponseDto MapToResponseDto(Lead lead)
         {
             return new LeadResponseDto
@@ -422,35 +505,22 @@ namespace pyreApi.Services
                 Email = lead.Email,
                 Telefono = lead.Telefono,
                 Mensaje = lead.Mensaje,
-                DireccionInteres = lead.DireccionInteres,
-                PresupuestoMinimo = lead.PresupuestoMinimo,
-                PresupuestoMaximo = lead.PresupuestoMaximo,
-                TipoOperacionInteres = lead.TipoOperacionInteres,
-                FechaContacto = lead.FechaContacto,
-                FechaUltimaInteraccion = lead.FechaUltimaInteraccion,
-                Notas = lead.Notas,
-                Puntuacion = lead.Puntuacion,
                 IdPropiedad = lead.IdPropiedad,
                 PropiedadTitulo = lead.Propiedad?.Titulo,
                 PropiedadDireccion = lead.Propiedad?.Direccion,
                 IdEstado = lead.IdEstado,
                 EstadoNombre = lead.Estado?.Nombre ?? "Desconocido",
-                EstadoColor = lead.Estado?.ColorHex,
-                IdFuenteContacto = lead.IdFuenteContacto,
-                FuenteNombre = lead.FuenteContacto?.Nombre ?? "Desconocido",
+                IdFuente = lead.IdFuente,
+                FuenteNombre = lead.Fuente?.Nombre ?? "Desconocido",
                 IdUsuarioAsignado = lead.IdUsuarioAsignado,
                 UsuarioAsignadoNombre = lead.UsuarioAsignado != null
-                    ? $"{lead.UsuarioAsignado.Nombre} {lead.UsuarioAsignado.Apellido}".Trim()
+                    ? $"{lead.UsuarioAsignado.Nombre}".Trim()
                     : null,
                 UsuarioAsignadoEmail = lead.UsuarioAsignado?.Email,
-                FechaCreacion = lead.FechaCreacion,
-                FechaModificacion = lead.FechaModificacion,
-                UsuarioCreaNombre = lead.UsuarioCrea != null
-                    ? $"{lead.UsuarioCrea.Nombre} {lead.UsuarioCrea.Apellido}".Trim()
-                    : null,
-                UsuarioModificaNombre = lead.UsuarioModifica != null
-                    ? $"{lead.UsuarioModifica.Nombre} {lead.UsuarioModifica.Apellido}".Trim()
-                    : null
+                IdEstadoAdmin = lead.IdEstadoAdmin,
+                EstadoAdminDescripcion = lead.EstadoAdmin?.Descripcion ?? "Activo",
+                CreadoEn = lead.CreadoEn,
+                ActualizadoEn = lead.ActualizadoEn
             };
         }
     }

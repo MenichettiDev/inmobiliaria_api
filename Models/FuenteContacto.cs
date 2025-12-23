@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace pyreApi.Models
+namespace inmobiliariaApi.Models
 {
     [Table("fuentes_contacto")]
     public class FuenteContacto

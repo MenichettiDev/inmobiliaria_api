@@ -1,4 +1,4 @@
-namespace pyreApi.DTOs.Lead
+namespace inmobiliariaApi.DTOs.Lead
 {
     public class LeadFiltrosDto
     {
@@ -6,7 +6,7 @@ namespace pyreApi.DTOs.Lead
         public string? Email { get; set; }
         public string? Telefono { get; set; }
         public int? IdEstado { get; set; }
-        public int? IdFuenteContacto { get; set; }
+        public int? IdFuente { get; set; }
         public int? IdUsuarioAsignado { get; set; }
         public int? IdPropiedad { get; set; }
         public DateTime? FechaDesde { get; set; }
@@ -22,7 +22,7 @@ namespace pyreApi.DTOs.Lead
         public int PageSize { get; set; } = 10;
 
         // Ordenamiento
-        public string? OrderBy { get; set; } = "FechaCreacion";
+        public string? OrderBy { get; set; } = "CreadoEn";
         public bool OrderDescending { get; set; } = true;
     }
 }

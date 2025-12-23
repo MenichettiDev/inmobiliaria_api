@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Lead
+namespace inmobiliariaApi.DTOs.Lead
 {
     public class UpdateLeadDto
     {
@@ -34,7 +34,7 @@ namespace pyreApi.DTOs.Lead
         public int? IdPropiedad { get; set; }
 
         [Required(ErrorMessage = "La fuente de contacto es obligatoria")]
-        public int IdFuenteContacto { get; set; }
+        public int IdFuente { get; set; }
 
         [StringLength(1000, ErrorMessage = "Las notas no pueden exceder 1000 caracteres")]
         public string? Notas { get; set; }

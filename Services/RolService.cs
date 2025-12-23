@@ -1,9 +1,9 @@
-using pyreApi.DTOs.Common;
-using pyreApi.DTOs.Rol;
-using pyreApi.Models;
-using pyreApi.Repositories;
+using inmobiliariaApi.DTOs.Common;
+using inmobiliariaApi.DTOs.Rol;
+using inmobiliariaApi.Models;
+using inmobiliariaApi.Repositories;
 
-namespace pyreApi.Services
+namespace inmobiliariaApi.Services
 {
     public class RolService : GenericService<Rol>
     {
@@ -133,7 +133,7 @@ namespace pyreApi.Services
             return new RolDto
             {
                 IdRol = rol.Id,
-                NombreRol = rol.NombreRol
+                NombreRol = rol.Nombre
             };
         }
 
@@ -141,13 +141,13 @@ namespace pyreApi.Services
         {
             return new Rol
             {
-                NombreRol = createDto.NombreRol
+                Nombre = createDto.NombreRol
             };
         }
 
         private void MapFromUpdateDto(UpdateRolDto updateDto, Rol rol)
         {
-            rol.NombreRol = updateDto.NombreRol;
+            rol.Nombre = updateDto.NombreRol;
         }
     }
 }

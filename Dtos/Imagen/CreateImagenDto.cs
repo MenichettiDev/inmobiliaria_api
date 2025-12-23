@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Imagen
+namespace inmobiliariaApi.DTOs.Imagen
 {
     public class CreateImagenDto
     {

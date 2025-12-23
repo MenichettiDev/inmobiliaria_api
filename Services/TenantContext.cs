@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Http;
-using pyreApi.Models;
-using pyreApi.Data;
+using inmobiliariaApi.Models;
+using inmobiliariaApi.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace pyreApi.Services
+namespace inmobiliariaApi.Services
 {
     public interface ITenantContext
     {

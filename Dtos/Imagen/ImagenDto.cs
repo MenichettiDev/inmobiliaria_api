@@ -1,4 +1,4 @@
-namespace pyreApi.DTOs.Imagen
+namespace inmobiliariaApi.DTOs.Imagen
 {
     public class ImagenDto
     {

@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using pyreApi.Data;
-using pyreApi.Models;
+using inmobiliariaApi.Data;
+using inmobiliariaApi.Models;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using System.Text;
 
-namespace pyreApi.Repositories
+namespace inmobiliariaApi.Repositories
 {
     public class UsuarioRepository : GenericRepository<Usuario>
     {
@@ -86,48 +86,41 @@ namespace pyreApi.Repositories
             return await _dbSet.Include(u => u.Rol).FirstOrDefaultAsync(u => u.Id == id);
         }
 
-        public async Task<bool> ValidateCredentialsAsync(string legajo, string password)
+        public async Task<bool> ValidateCredentialsAsync(string email, string password)
         {
             try
             {
-                _logger.LogInformation("Iniciando validación de credenciales para legajo: {Legajo}", legajo);
+                _logger.LogInformation("Iniciando validación de credenciales para email: {Email}", email);
 
-                if (string.IsNullOrWhiteSpace(legajo) || string.IsNullOrWhiteSpace(password))
+                if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 {
-                    _logger.LogWarning("Intento de validación con legajo o contraseña vacíos");
+                    _logger.LogWarning("Intento de validación con email o contraseña vacíos");
                     return false;
                 }
 
-                // Validar longitud del legajo
-                if (legajo.Length > 5)
-                {
-                    _logger.LogWarning("Intento de validación con legajo que excede 5 caracteres: {Legajo}", legajo);
-                    return false;
-                }
-
-                var usuario = await _context.Usuarios // Cambiar Usuario por Usuarios
-                    .FirstOrDefaultAsync(u => u.Legajo == legajo);
+                var usuario = await _context.Usuarios
+                    .FirstOrDefaultAsync(u => u.Email == email);
 
                 if (usuario == null)
                 {
-                    _logger.LogWarning("No se encontró usuario con legajo: {Legajo}", legajo);
+                    _logger.LogWarning("No se encontró usuario con email: {Email}", email);
                     return false;
                 }
 
                 _logger.LogInformation("Usuario encontrado para validación. Tiene contraseña configurada: {HasPassword}",
-                    !string.IsNullOrEmpty(usuario.PasswordHash));
+                    !string.IsNullOrEmpty(usuario.HashContrasena));
 
                 // Check if user has a password set
-                if (string.IsNullOrEmpty(usuario.PasswordHash))
+                if (string.IsNullOrEmpty(usuario.HashContrasena))
                 {
-                    _logger.LogWarning("El usuario con legajo {Legajo} no tiene contraseña configurada", legajo);
+                    _logger.LogWarning("El usuario con email {Email} no tiene contraseña configurada", email);
                     return false;
                 }
 
                 // Verify password using KeyDerivation (matching the hash method)
-                bool isValid = VerifyPasswordWithKeyDerivation(password, usuario.PasswordHash);
+                bool isValid = VerifyPasswordWithKeyDerivation(password, usuario.HashContrasena);
 
-                _logger.LogInformation("Validación de credenciales completada para legajo {Legajo}: {IsValid}", legajo, isValid);
+                _logger.LogInformation("Validación de credenciales completada para email {Email}: {IsValid}", email, isValid);
 
                 return isValid;
             }
@@ -148,31 +141,24 @@ namespace pyreApi.Repositories
             return await _dbSet.Where(u => u.AccedeAlSistema == true && u.Activo == true).ToListAsync();
         }
 
-        public async Task<Usuario?> GetByLegajoWithRolAsync(string legajo)
+        public async Task<Usuario?> GetByEmailWithRolAsync(string email)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(legajo))
+                if (string.IsNullOrWhiteSpace(email))
                 {
-                    _logger.LogWarning("Intento de búsqueda con legajo vacío o nulo");
+                    _logger.LogWarning("Intento de búsqueda con email vacío o nulo");
                     return null;
                 }
 
-                // Validar longitud del legajo
-                if (legajo.Length > 5)
-                {
-                    _logger.LogWarning("Intento de búsqueda con legajo que excede 5 caracteres: {Legajo}", legajo);
-                    return null;
-                }
+                _logger.LogInformation("Buscando usuario por email: {Email}", email);
 
-                _logger.LogInformation("Buscando usuario por legajo: {Legajo}", legajo);
-
-                var usuario = await _context.Usuarios // Cambiar Usuario por Usuarios
+                var usuario = await _context.Usuarios
                     .Include(u => u.Rol)
-                    .FirstOrDefaultAsync(u => u.Legajo == legajo);
+                    .FirstOrDefaultAsync(u => u.Email == email);
 
-                _logger.LogInformation("Resultado de búsqueda por legajo {Legajo}: {Found}",
-                    legajo, usuario != null ? "Usuario encontrado" : "Usuario no encontrado");
+                _logger.LogInformation("Resultado de búsqueda por email {Email}: {Found}",
+                    email, usuario != null ? "Usuario encontrado" : "Usuario no encontrado");
 
                 return usuario;
             }
@@ -257,7 +243,7 @@ namespace pyreApi.Repositories
         public async Task<bool> ValidateUserPasswordAsync(int userId, string password)
         {
             var usuario = await _context.Usuarios.FindAsync(userId);
-            if (usuario == null || string.IsNullOrEmpty(usuario.PasswordHash))
+            if (usuario == null || string.IsNullOrEmpty(usuario.HashContrasena))
                 return false;
 
             string salt = _configuration["Salt"] ?? string.Empty;
@@ -274,7 +260,7 @@ namespace pyreApi.Repositories
                 )
             );
 
-            return usuario.PasswordHash == hashedPassword;
+            return usuario.HashContrasena == hashedPassword;
         }
     }
 }

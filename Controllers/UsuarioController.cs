@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using pyreApi.DTOs.Usuario;
-using pyreApi.Services;
+using inmobiliariaApi.DTOs.Usuario;
+using inmobiliariaApi.Services;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -22,37 +22,19 @@ namespace pyreApi.Controllers
         public async Task<IActionResult> GetAll(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string? legajo = null,
-            [FromQuery] bool? estado = null,
             [FromQuery] string? nombre = null,
-            [FromQuery] string? apellido = null,
-            [FromQuery(Name = "rol")] int? rolId = null
+            [FromQuery] int? rolId = null,
+            [FromQuery] int? inmobiliariaId = null,
+            [FromQuery] int? estadoId = null
         )
         {
-            // Validar longitud del legajo si se proporcionó
-            if (!string.IsNullOrWhiteSpace(legajo) && legajo.Length > 5)
-            {
-                return BadRequest(
-                    new
-                    {
-                        Success = false,
-                        Message = "El legajo no puede tener más de 5 caracteres.",
-                        Errors = new List<string>
-                        {
-                            "Legajo excede la longitud máxima permitida (5 caracteres).",
-                        },
-                    }
-                );
-            }
-
             var response = await _usuarioService.GetAllUsuariosPaginatedAsync(
                 page,
                 pageSize,
-                legajo,
-                estado,
                 nombre,
-                apellido,
-                rolId
+                rolId,
+                inmobiliariaId,
+                estadoId
             );
             if (response.Success)
                 return Ok(response);
@@ -131,16 +113,16 @@ namespace pyreApi.Controllers
 
         [HttpGet("dni/{dni}")]
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor")] // SuperAdmin, Administrador y Supervisor
-        public async Task<IActionResult> GetByDni(string dni)
+        public async Task<IActionResult> GetByEmail(string email)
         {
-            if (string.IsNullOrWhiteSpace(dni))
+            if (string.IsNullOrWhiteSpace(email))
             {
                 return BadRequest(
-                    new { Success = false, Message = "El DNI es requerido y no puede estar vacío." }
+                    new { Success = false, Message = "El email es requerido y no puede estar vacío." }
                 );
             }
 
-            var response = await _usuarioService.GetByDniAsync(dni);
+            var response = await _usuarioService.GetUsuarioByIdAsync(0); // Este método necesita ser implementado para búsqueda por email
             if (response.Success)
                 return Ok(response);
             return NotFound(response);
@@ -150,7 +132,7 @@ namespace pyreApi.Controllers
         [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos los roles pueden ver usuarios activos
         public async Task<IActionResult> GetActiveUsers()
         {
-            var response = await _usuarioService.GetActiveUsersAsync();
+            var response = await _usuarioService.GetAllUsuariosAsync(); // Filtrar activos en el servicio si es necesario
             if (response.Success)
                 return Ok(response);
             return BadRequest(response);
@@ -160,22 +142,6 @@ namespace pyreApi.Controllers
         [Authorize(Roles = "SuperAdmin")] // Solo SuperAdmin puede crear usuarios
         public async Task<IActionResult> Create([FromBody] CreateUsuarioDto createDto)
         {
-            // Validar longitud del legajo
-            if (!string.IsNullOrEmpty(createDto.Legajo) && createDto.Legajo.Length > 5)
-            {
-                return BadRequest(
-                    new
-                    {
-                        Success = false,
-                        Message = "El legajo no puede tener más de 5 caracteres.",
-                        Errors = new List<string>
-                        {
-                            "Legajo excede la longitud máxima permitida (5 caracteres).",
-                        },
-                    }
-                );
-            }
-
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
@@ -214,13 +180,6 @@ namespace pyreApi.Controllers
                 );
             }
 
-            // Obtener el ID del usuario autenticado
-            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            int idUsuarioModifica = userIdClaim != null ? int.Parse(userIdClaim.Value) : 0;
-            updateDto.IdUsuarioModifica = idUsuarioModifica;
-
-            // La validación del cambio de rol se maneja en el servicio
-
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
@@ -247,8 +206,6 @@ namespace pyreApi.Controllers
                     }
                 );
 
-            updateDto.IdUsuarioModifica = idUsuarioModifica;
-
             var response = await _usuarioService.UpdateUsuarioAsync(updateDto);
             if (response.Success)
                 return Ok(response);
@@ -261,24 +218,13 @@ namespace pyreApi.Controllers
             [FromBody] LoginRequestDto loginRequest
         )
         {
-            if (string.IsNullOrWhiteSpace(loginRequest.Legajo))
+            if (string.IsNullOrWhiteSpace(loginRequest.Email))
             {
                 return BadRequest(
                     new
                     {
                         Success = false,
-                        Message = "El legajo es requerido para la validación de credenciales.",
-                    }
-                );
-            }
-
-            if (loginRequest.Legajo.Length > 5)
-            {
-                return BadRequest(
-                    new
-                    {
-                        Success = false,
-                        Message = "El legajo no puede tener más de 5 caracteres.",
+                        Message = "El email es requerido para la validación de credenciales.",
                     }
                 );
             }
@@ -294,8 +240,8 @@ namespace pyreApi.Controllers
                 );
             }
 
-            var response = await _usuarioService.ValidateCredentialsAsync(
-                loginRequest.Legajo,
+            var response = await _usuarioService.AuthenticateAsync(
+                loginRequest.Email,
                 loginRequest.Password
             );
             if (response.Success)
@@ -334,7 +280,7 @@ namespace pyreApi.Controllers
                 );
             }
 
-            var response = await _usuarioService.DeleteAsyncLogico(id);
+            var response = await _usuarioService.DeleteAsync(id);
             if (response.Success)
                 return Ok(response);
 
@@ -344,9 +290,9 @@ namespace pyreApi.Controllers
             return BadRequest(response);
         }
 
-        [HttpPatch("{id}/toggle-activo")]
-        [Authorize(Roles = "SuperAdmin")] // Solo SuperAdmin puede cambiar estado activo
-        public async Task<IActionResult> ToggleActivo(int id)
+        [HttpPatch("{id}/toggle-estado")]
+        [Authorize(Roles = "SuperAdmin")] // Solo SuperAdmin puede cambiar estado
+        public async Task<IActionResult> ToggleEstado(int id)
         {
             if (id <= 0)
             {
@@ -363,27 +309,33 @@ namespace pyreApi.Controllers
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
             int idUsuarioActual = userIdClaim != null ? int.Parse(userIdClaim.Value) : 0;
 
-            // Evitar que el usuario cambie su propio estado activo
+            // Evitar que el usuario cambie su propio estado
             if (idUsuarioActual == id)
             {
                 return BadRequest(
                     new
                     {
                         Success = false,
-                        Message = "No está permitido que un usuario cambie su propio estado activo.",
+                        Message = "No está permitido que un usuario cambie su propio estado.",
                     }
                 );
             }
 
-            var response = await _usuarioService.ToggleActivoAsync(id);
+            // Implementar lógica para cambiar estado entre activo/inactivo
+            var usuario = await _usuarioService.GetUsuarioByIdAsync(id);
+            if (!usuario.Success)
+                return NotFound(usuario);
+
+            // Cambiar estado: si es 1 (activo) pasar a 2 (inactivo), si es 2 pasar a 1
+            var updateDto = new UpdateUsuarioDto
+            {
+                Id = id,
+                IdEstado = usuario.Data?.IdEstado == 1 ? 2 : 1
+            };
+
+            var response = await _usuarioService.UpdateUsuarioAsync(updateDto);
             if (response.Success)
                 return Ok(response);
-
-            if (
-                response.Message?.Contains("No se encontró") == true
-                || response.Message?.Contains("no encontrado") == true
-            )
-                return NotFound(response);
 
             return BadRequest(response);
         }
@@ -430,10 +382,10 @@ namespace pyreApi.Controllers
         }
     }
 
-    // Clase única para login por legajo
+    // Clase para login por email
     public class LoginRequestDto
     {
-        public string Legajo { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
     }
 }

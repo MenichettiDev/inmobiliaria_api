@@ -1,7 +1,7 @@
-using pyreApi.Models;
+using inmobiliariaApi.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace pyreApi.Data
+namespace inmobiliariaApi.Data
 {
     public class ApplicationDbContext : DbContext // Heredar de DbContext
     {

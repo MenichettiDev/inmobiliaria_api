@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Lead
+namespace inmobiliariaApi.DTOs.Lead
 {
     public class CreateLeadDto
     {
@@ -16,31 +16,13 @@ namespace pyreApi.DTOs.Lead
         [RegularExpression(@"^[\d\s\+\-\(\)]+$", ErrorMessage = "El teléfono solo puede contener números, espacios y los siguientes caracteres: +()-")]
         public string? Telefono { get; set; }
 
-        [StringLength(500, ErrorMessage = "El mensaje no puede exceder 500 caracteres")]
+        [StringLength(1000, ErrorMessage = "El mensaje no puede exceder 1000 caracteres")]
         public string? Mensaje { get; set; }
-
-        [StringLength(200, ErrorMessage = "La dirección de interés no puede exceder 200 caracteres")]
-        public string? DireccionInteres { get; set; }
-
-        [Range(0, double.MaxValue, ErrorMessage = "El presupuesto mínimo debe ser mayor o igual a 0")]
-        public decimal? PresupuestoMinimo { get; set; }
-
-        [Range(0, double.MaxValue, ErrorMessage = "El presupuesto máximo debe ser mayor o igual a 0")]
-        public decimal? PresupuestoMaximo { get; set; }
-
-        [StringLength(50)]
-        public string? TipoOperacionInteres { get; set; } // "venta", "alquiler"
 
         public int? IdPropiedad { get; set; }
 
         [Required(ErrorMessage = "La fuente de contacto es obligatoria")]
-        public int IdFuenteContacto { get; set; }
-
-        [StringLength(1000, ErrorMessage = "Las notas no pueden exceder 1000 caracteres")]
-        public string? Notas { get; set; }
-
-        [Range(1, 5, ErrorMessage = "La puntuación debe estar entre 1 y 5")]
-        public int? Puntuacion { get; set; }
+        public int IdFuente { get; set; }
 
         // Validación personalizada
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
@@ -53,14 +35,6 @@ namespace pyreApi.DTOs.Lead
                     new[] { nameof(Email), nameof(Telefono) });
             }
 
-            // Si se proporcionan ambos presupuestos, el mínimo debe ser menor al máximo
-            if (PresupuestoMinimo.HasValue && PresupuestoMaximo.HasValue &&
-                PresupuestoMinimo.Value > PresupuestoMaximo.Value)
-            {
-                yield return new ValidationResult(
-                    "El presupuesto mínimo no puede ser mayor al máximo",
-                    new[] { nameof(PresupuestoMinimo), nameof(PresupuestoMaximo) });
-            }
         }
     }
 }

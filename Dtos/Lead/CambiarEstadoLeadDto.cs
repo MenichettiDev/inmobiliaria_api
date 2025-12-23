@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Lead
+namespace inmobiliariaApi.DTOs.Lead
 {
     public class CambiarEstadoLeadDto
     {

@@ -1,4 +1,4 @@
-namespace pyreApi.Exceptions
+namespace inmobiliariaApi.Exceptions
 {
     public class LimiteDeLeadsExcedidoException : Exception
     {

@@ -1,14 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using pyreApi.Services;
-using pyreApi.Models;
+using inmobiliariaApi.Services;
+using inmobiliariaApi.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [Route("api/auth")]
     [ApiController]
@@ -33,11 +33,11 @@ namespace pyreApi.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            if (string.IsNullOrEmpty(request.Legajo) || string.IsNullOrEmpty(request.Password))
+            if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
             {
                 _logger.LogWarning(
-                    "Intento de login con campos vacíos. Legajo: '{Legajo}', Password vacío: {PasswordEmpty}",
-                    request.Legajo ?? "(nulo)",
+                    "Intento de login con campos vacíos. Email: '{Email}', Password vacío: {PasswordEmpty}",
+                    request.Email ?? "(nulo)",
                     string.IsNullOrEmpty(request.Password)
                 );
                 return BadRequest(
@@ -45,22 +45,22 @@ namespace pyreApi.Controllers
                     {
                         status = 400,
                         error = "Bad Request",
-                        message = "El legajo y la contraseña son obligatorios.",
+                        message = "El email y la contraseña son obligatorios.",
                     }
                 );
             }
 
-            var authResponse = await _usuarioService.AuthenticateAsync(request.Legajo, request.Password);
+            var authResponse = await _usuarioService.AuthenticateAsync(request.Email, request.Password);
             if (!authResponse.Success)
             {
-                _logger.LogWarning("Login fallido para el legajo: {Legajo}. Error: {Error}",
-                    request.Legajo, authResponse.Message);
+                _logger.LogWarning("Login fallido para el email: {Email}. Error: {Error}",
+                    request.Email, authResponse.Message);
                 return Unauthorized(
                     new
                     {
                         status = 401,
                         error = "Unauthorized",
-                        message = "Legajo o contraseña incorrectos.",
+                        message = "Email o contraseña incorrectos.",
                     }
                 );
             }
@@ -72,7 +72,7 @@ namespace pyreApi.Controllers
                 return BadRequest(new { Message = "El usuario no existe." });
             }
 
-            _logger.LogInformation("Usuario logueado exitosamente: {Legajo}", usuario.Legajo);
+            _logger.LogInformation("Usuario logueado exitosamente: {Email}", usuario.Email);
             var token = GenerateJwtToken(usuario);
 
             return Ok(
@@ -86,11 +86,10 @@ namespace pyreApi.Controllers
                         usuario.Id,
                         usuario.Nombre,
                         usuario.Email,
-                        usuario.Dni,
-                        usuario.Legajo,
-                        usuario.RolId,
-                        RolNombre = usuario.Rol?.NombreRol,
-                        usuario.Avatar,
+                        usuario.Telefono,
+                        usuario.IdRol,
+                        RolNombre = usuario.Rol?.Nombre,
+                        usuario.IdEstado,
                     },
                 }
             );
@@ -109,8 +108,8 @@ namespace pyreApi.Controllers
             {
                 new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
                 new Claim(ClaimTypes.Email, usuario.Email ?? ""),
-                new Claim("legajo", usuario.Legajo ?? ""),
-                new Claim(ClaimTypes.Role, usuario.Rol?.NombreRol ?? "Usuario"),
+                new Claim(ClaimTypes.Name, usuario.Nombre ?? ""),
+                new Claim(ClaimTypes.Role, usuario.Rol?.Nombre ?? "Usuario"),
             };
 
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -132,7 +131,7 @@ namespace pyreApi.Controllers
 
     public class LoginRequest
     {
-        public string Legajo { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
     }
 }

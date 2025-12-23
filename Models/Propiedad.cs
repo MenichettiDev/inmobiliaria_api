@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace pyreApi.Models
+namespace inmobiliariaApi.Models
 {
     [Table("propiedades")]
     public class Propiedad

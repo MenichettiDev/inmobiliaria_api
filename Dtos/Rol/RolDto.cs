@@ -1,4 +1,4 @@
-namespace pyreApi.DTOs.Rol
+namespace inmobiliariaApi.DTOs.Rol
 {
     public class RolDto
     {

@@ -1,10 +1,10 @@
-using pyreApi.Repositories;
-using pyreApi.Services;
-using pyreApi.Models;
-using pyreApi.Exceptions;
+using inmobiliariaApi.Repositories;
+using inmobiliariaApi.Services;
+using inmobiliariaApi.Models;
+using inmobiliariaApi.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
-namespace pyreApi.Services
+namespace inmobiliariaApi.Services
 {
     public interface IUsoMensualService
     {
@@ -31,19 +31,19 @@ namespace pyreApi.Services
                 throw new InvalidOperationException("No se puede determinar la inmobiliaria actual");
 
             // Validar que la inmobiliaria está activa
-            if (inmobiliaria.IdEstadoInmobiliaria != 1)
+            if (inmobiliaria.IdEstado != 1)
             {
                 throw new InmobiliariaInactivaException(
                     inmobiliaria.Id,
-                    inmobiliaria.EstadoInmobiliaria?.Descripcion ?? "Desconocido"
+                    inmobiliaria.Estado?.Descripcion ?? "Desconocido"
                 );
             }
 
             var now = DateTime.UtcNow;
             var leadsUsados = await _leadRepository.GetLeadsCountByMonthAsync(now.Year, now.Month);
-            var limite = inmobiliaria.Plan?.LimiteLeadsMensual ?? 0;
+            var limite = inmobiliaria.Plan?.MaxLeadsMes ?? 0;
 
-            if (leadsUsados >= limite)
+            if (limite > 0 && leadsUsados >= limite)
             {
                 throw new LimiteDeLeadsExcedidoException(
                     limite,
@@ -61,7 +61,7 @@ namespace pyreApi.Services
 
             var now = DateTime.UtcNow;
             var usados = await _leadRepository.GetLeadsCountByMonthAsync(now.Year, now.Month);
-            var limite = inmobiliaria.Plan?.LimiteLeadsMensual ?? 0;
+            var limite = inmobiliaria.Plan?.MaxLeadsMes ?? 0;
 
             return (usados, limite);
         }

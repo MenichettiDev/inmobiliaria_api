@@ -1,6 +1,6 @@
 using System.Security.Claims;
 
-namespace pyreApi.Extensions // creamos un namespace para las extensiones
+namespace inmobiliariaApi.Extensions // creamos un namespace para las extensiones
 {
     public static class ClaimsPrincipalExtensions // creamos una clase estatica
     {

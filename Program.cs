@@ -15,9 +15,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Models;
-using pyreApi.Data;
-using pyreApi.Repositories;
-using pyreApi.Services;
+using inmobiliariaApi.Data;
+using inmobiliariaApi.Repositories;
+using inmobiliariaApi.Services;
 
 // 🚀 Forzamos que Kestrel use solo el puerto 2000 en todas las interfaces
 Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://0.0.0.0:2000");

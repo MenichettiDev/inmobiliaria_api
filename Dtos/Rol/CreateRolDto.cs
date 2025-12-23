@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace pyreApi.DTOs.Rol
+namespace inmobiliariaApi.DTOs.Rol
 {
     public class CreateRolDto
     {

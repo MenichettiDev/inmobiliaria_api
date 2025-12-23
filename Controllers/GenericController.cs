@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using pyreApi.Services;
+using inmobiliariaApi.Services;
 
-namespace pyreApi.Controllers
+namespace inmobiliariaApi.Controllers
 {
     [Authorize] // Requiere autenticación para todo el controller
     public abstract class GenericController<T> : ControllerBase where T : class

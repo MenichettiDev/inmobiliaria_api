@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace pyreApi.Models
+namespace inmobiliariaApi.Models
 {
     [Table("estados_lead_admin")]
     public class EstadoLeadAdmin
@@ -23,3 +23,7 @@ namespace pyreApi.Models
         public virtual ICollection<Lead> Leads { get; set; } = new List<Lead>();
     }
 }
+
+// 1	activo	Lead operativo	1
+// 2	archivado	Lead archivado	1
+// 3	eliminado	Lead eliminado lógicamente	1
