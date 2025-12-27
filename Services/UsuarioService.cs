@@ -263,7 +263,8 @@ namespace inmobiliariaApi.Services
         {
             try
             {
-                _logger.LogInformation("Iniciando creación de usuario con email: {Email}", createDto.Email);
+                _logger.LogInformation("Iniciando creación de usuario con email: {Email} para inmobiliaria: {IdInmobiliaria}",
+                    createDto.Email, createDto.IdInmobiliaria);
 
                 // Validaciones básicas
                 if (string.IsNullOrWhiteSpace(createDto.Email))
@@ -293,21 +294,21 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                if (createDto.IdInmobiliaria <= 0)
-                {
-                    return new BaseResponseDto<UsuarioResponseDto>
-                    {
-                        Success = false,
-                        Message = "Debe especificar una inmobiliaria válida."
-                    };
-                }
-
                 if (createDto.IdRol <= 0)
                 {
                     return new BaseResponseDto<UsuarioResponseDto>
                     {
                         Success = false,
                         Message = "Debe especificar un rol válido."
+                    };
+                }
+
+                if (createDto.IdEstado < 1 || createDto.IdEstado > 3)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "El estado debe ser 1 (activo), 2 (bloqueado) o 3 (inactivo)."
                     };
                 }
 
@@ -329,7 +330,7 @@ namespace inmobiliariaApi.Services
                     Email = createDto.Email,
                     Telefono = createDto.Telefono,
                     IdRol = createDto.IdRol,
-                    IdInmobiliaria = createDto.IdInmobiliaria,
+                    IdInmobiliaria = createDto.IdInmobiliaria, // Ya viene asignado por el controller
                     IdEstado = createDto.IdEstado,
                     CreadoEn = DateTime.UtcNow,
                     ActualizadoEn = DateTime.UtcNow,
@@ -339,10 +340,12 @@ namespace inmobiliariaApi.Services
                 _logger.LogInformation("Hasheando contraseña para usuario: {Email}", createDto.Email);
                 usuario.HashContrasena = HashPassword(createDto.Password);
 
-                _logger.LogInformation("Guardando usuario en base de datos: {Email}", createDto.Email);
+                _logger.LogInformation("Guardando usuario en base de datos: {Email} con inmobiliaria: {IdInmobiliaria}",
+                    createDto.Email, createDto.IdInmobiliaria);
                 var result = await _usuarioRepository.AddAsync(usuario);
 
-                _logger.LogInformation("Usuario creado exitosamente con ID: {Id}", result.Id);
+                _logger.LogInformation("Usuario creado exitosamente con ID: {Id} para inmobiliaria: {IdInmobiliaria}",
+                    result.Id, result.IdInmobiliaria);
 
                 // Cargar el usuario con rol para la respuesta
                 var usuarioConRol = await _usuarioRepository.GetByIdWithRolAsync(result.Id);
@@ -457,9 +460,12 @@ namespace inmobiliariaApi.Services
         {
             try
             {
+                _logger.LogInformation("Iniciando actualización de usuario ID: {Id} en tenant: {TenantId}", updateDto.Id, tenantId);
+
                 var existingUser = await _usuarioRepository.GetByIdWithRolAndTenantAsync(updateDto.Id, tenantId);
                 if (existingUser == null)
                 {
+                    _logger.LogWarning("Intento de actualizar usuario inexistente: ID {Id} en tenant {TenantId}", updateDto.Id, tenantId);
                     return new BaseResponseDto<UsuarioResponseDto>
                     {
                         Success = false,
@@ -467,12 +473,13 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // Validar email único si se modifica
+                // Validar email único si se modifica (solo dentro del mismo tenant para mayor seguridad)
                 if (!string.IsNullOrEmpty(updateDto.Email) && updateDto.Email != existingUser.Email)
                 {
                     var existingEmail = await _usuarioRepository.GetByEmailAsync(updateDto.Email);
-                    if (existingEmail != null)
+                    if (existingEmail != null && existingEmail.Id != existingUser.Id)
                     {
+                        _logger.LogWarning("Intento de usar email existente: {Email} para usuario {Id}", updateDto.Email, updateDto.Id);
                         return new BaseResponseDto<UsuarioResponseDto>
                         {
                             Success = false,
@@ -494,18 +501,17 @@ namespace inmobiliariaApi.Services
                 if (updateDto.IdRol.HasValue)
                     existingUser.IdRol = updateDto.IdRol.Value;
 
-                if (updateDto.IdInmobiliaria.HasValue)
-                    existingUser.IdInmobiliaria = updateDto.IdInmobiliaria.Value;
-
                 if (updateDto.IdEstado.HasValue)
                     existingUser.IdEstado = updateDto.IdEstado.Value;
 
-                // Asegurar que no cambie de tenant
-                updateDto.IdInmobiliaria = tenantId;
+                // IMPORTANTE: NO permitir cambio de inmobiliaria
+                // Mantener siempre el tenant original
+                existingUser.IdInmobiliaria = tenantId;
 
                 // Actualizar contraseña si se envía
                 if (!string.IsNullOrEmpty(updateDto.Password))
                 {
+                    _logger.LogInformation("Actualizando contraseña para usuario ID: {Id}", updateDto.Id);
                     existingUser.HashContrasena = HashPassword(updateDto.Password);
                 }
 
@@ -513,8 +519,10 @@ namespace inmobiliariaApi.Services
 
                 await _usuarioRepository.UpdateAsync(existingUser);
 
+                _logger.LogInformation("Usuario ID: {Id} actualizado exitosamente en tenant: {TenantId}", updateDto.Id, tenantId);
+
                 // Cargar el usuario actualizado para la respuesta
-                var updatedUser = await _usuarioRepository.GetByIdWithRolAsync(existingUser.Id);
+                var updatedUser = await _usuarioRepository.GetByIdWithRolAndTenantAsync(existingUser.Id, tenantId);
                 var responseDto = MapToResponseDto(updatedUser ?? existingUser);
 
                 return new BaseResponseDto<UsuarioResponseDto>
@@ -533,7 +541,7 @@ namespace inmobiliariaApi.Services
                     Message = "No se pudieron actualizar los datos del usuario. Por favor, intente nuevamente.",
                     Errors = new List<string>
                     {
-                        "Error interno del servidor al procesar la solicitud.",
+                        $"Error interno: {ex.Message}",
                     },
                 };
             }
@@ -789,7 +797,7 @@ namespace inmobiliariaApi.Services
 
                 // Eliminación lógica: cambiar estado a 3 (inactivo)
                 usuario.IdEstado = 3;
-                usuario.ActualizadoEn = DateTime.UtcNow;
+                usuario.ActualizadoEn = DateTime.Now;
 
                 await _usuarioRepository.UpdateAsync(usuario);
 

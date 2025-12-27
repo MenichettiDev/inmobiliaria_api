@@ -158,7 +158,8 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "La contraseña es obligatoria." });
             }
 
-            // Asegurar que se cree en el tenant correcto
+            // Asignar automáticamente el tenant del usuario autenticado
+            // El usuario NO puede especificar un tenant diferente
             createDto.IdInmobiliaria = tenantId;
 
             var response = await _usuarioService.CreateUsuarioAsync(createDto);
@@ -188,11 +189,36 @@ namespace inmobiliariaApi.Controllers
             var tenantId = GetTenantId();
             var userId = GetUserId();
 
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
             // Prevenir auto-modificación
             if (userId == id)
             {
                 return BadRequest(new { Success = false, Message = "No puede modificar su propio usuario." });
             }
+
+            // Validar que no se intente cambiar de inmobiliaria
+            if (updateDto.IdInmobiliaria.HasValue && updateDto.IdInmobiliaria.Value != tenantId)
+            {
+                return BadRequest(new { Success = false, Message = "No puede cambiar el usuario a otra inmobiliaria." });
+            }
+
+            // Validar rol y estado
+            if (updateDto.IdRol.HasValue && updateDto.IdRol.Value <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El rol debe ser mayor que 0." });
+            }
+
+            if (updateDto.IdEstado.HasValue && updateDto.IdEstado.Value <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El estado debe ser mayor que 0." });
+            }
+
+            // Forzar que mantenga el mismo tenant (por seguridad)
+            updateDto.IdInmobiliaria = tenantId;
 
             var response = await _usuarioService.UpdateUsuarioAsync(updateDto, tenantId);
             if (response.Success)
