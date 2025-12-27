@@ -154,6 +154,66 @@ namespace inmobiliariaApi.Repositories
             return (data, totalRecords);
         }
 
+        public async Task<Usuario?> GetByIdWithRolAndTenantAsync(int id, int tenantId)
+        {
+            return await _dbSet
+                .Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.Id == id && u.IdInmobiliaria == tenantId);
+        }
+
+        public async Task<IEnumerable<Usuario>> GetActiveUsersByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(u => u.Rol)
+                .Where(u => u.IdEstado == 1 && u.IdInmobiliaria == tenantId)
+                .ToListAsync();
+        }
+
+        public async Task<(IEnumerable<Usuario> Data, int TotalRecords)> GetAllWithRolPagedByTenantAsync(
+            int page, int pageSize, int tenantId, string? nombre = null, int? rolId = null, int? estadoId = null)
+        {
+            var query = _dbSet.Include(u => u.Rol).Where(u => u.IdInmobiliaria == tenantId);
+
+            if (!string.IsNullOrEmpty(nombre))
+            {
+                query = query.Where(u => u.Nombre.Contains(nombre));
+            }
+
+            if (rolId.HasValue)
+            {
+                query = query.Where(u => u.IdRol == rolId.Value);
+            }
+
+            if (estadoId.HasValue)
+            {
+                query = query.Where(u => u.IdEstado == estadoId.Value);
+            }
+
+            var totalRecords = await query.CountAsync();
+            var data = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (data, totalRecords);
+        }
+
+        public async Task<IEnumerable<Usuario>> GetActiveAndBlockedUsersByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(u => u.Rol)
+                .Where(u => (u.IdEstado == 1 || u.IdEstado == 2) && u.IdInmobiliaria == tenantId)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<Usuario>> GetInactiveUsersByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(u => u.Rol)
+                .Where(u => u.IdEstado == 3 && u.IdInmobiliaria == tenantId)
+                .ToListAsync();
+        }
+
         // Método auxiliar para verificar contraseña usando KeyDerivation
         private bool VerifyPasswordWithKeyDerivation(string password, string hashedPassword)
         {

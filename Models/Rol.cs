@@ -18,3 +18,7 @@ namespace inmobiliariaApi.Models
     }
 }
 
+// 1	administrador
+// 2	supervisor
+// 3	agente
+// 4	asistente

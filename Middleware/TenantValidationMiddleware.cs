@@ -17,9 +17,15 @@ public class TenantValidationMiddleware
     {
         try
         {
-            // Excluir rutas específicas (por ejemplo, login)
+            // Excluir rutas específicas
             var path = context.Request.Path.Value?.ToLower();
-            if (path != null && (path.StartsWith("/api/auth/login") || path.StartsWith("/api/public")))
+            if (path != null && (
+                path.StartsWith("/api/auth/login") ||
+                path.StartsWith("/api/public") ||
+                path.StartsWith("/api/usuario/validate") ||
+                path.StartsWith("/api/usuario/debug") ||
+                path.Contains("/swagger") ||
+                path.StartsWith("/health")))
             {
                 await _next(context);
                 return;
@@ -30,9 +36,11 @@ public class TenantValidationMiddleware
             {
                 var idInmobiliaria = user.Claims.FirstOrDefault(c => c.Type == "IdInmobiliaria")?.Value;
 
+                _logger.LogInformation("Validando tenant para path: {Path}, IdInmobiliaria: {IdInmobiliaria}", path, idInmobiliaria);
+
                 if (string.IsNullOrEmpty(idInmobiliaria))
                 {
-                    _logger.LogWarning("El token no contiene el claim 'IdInmobiliaria'.");
+                    _logger.LogWarning("El token no contiene el claim 'IdInmobiliaria' para path: {Path}", path);
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     await context.Response.WriteAsync("No se pudo validar el IdInmobiliaria.");
                     return;
@@ -40,11 +48,13 @@ public class TenantValidationMiddleware
 
                 if (!int.TryParse(idInmobiliaria, out _))
                 {
-                    _logger.LogWarning("El claim 'IdInmobiliaria' no es un número válido.");
+                    _logger.LogWarning("El claim 'IdInmobiliaria' no es un número válido: {IdInmobiliaria}", idInmobiliaria);
                     context.Response.StatusCode = StatusCodes.Status400BadRequest;
                     await context.Response.WriteAsync("El IdInmobiliaria no es válido.");
                     return;
                 }
+
+                _logger.LogInformation("Tenant válido: {IdInmobiliaria} para path: {Path}", idInmobiliaria, path);
             }
 
             // Continuar con el siguiente middleware
@@ -52,7 +62,7 @@ public class TenantValidationMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ocurrió un error en el TenantValidationMiddleware.");
+            _logger.LogError(ex, "Error en TenantValidationMiddleware para path: {Path}", context.Request.Path);
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsync("Ocurrió un error interno en el servidor.");
         }

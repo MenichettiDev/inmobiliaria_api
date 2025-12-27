@@ -68,6 +68,8 @@ namespace inmobiliariaApi.Services
                 CreadoEn = usuario.CreadoEn,
                 ActualizadoEn = usuario.ActualizadoEn,
                 RolNombre = usuario.Rol?.Nombre ?? string.Empty,
+                // Asegurar que no se incluyan datos sensibles:
+                // NO incluir: HashContrasena, navegaciones innecesarias, etc.
             };
         }
 
@@ -114,7 +116,15 @@ namespace inmobiliariaApi.Services
                 if (page <= 0) page = 1;
                 if (pageSize <= 0) pageSize = 10;
 
-                var (usuarios, totalRecords) = await _usuarioRepository.GetAllWithRolPagedAsync(page, pageSize);
+                // Usar el método que filtra por tenant
+                var (usuarios, totalRecords) = await _usuarioRepository.GetAllWithRolPagedByTenantAsync(
+                    page,
+                    pageSize,
+                    inmobiliariaId ?? 0, // Usar el tenantId del parámetro
+                    nombre,
+                    rolId,
+                    estadoId
+                );
 
                 var usuariosDto = usuarios.Select(MapToResponseDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
@@ -139,7 +149,7 @@ namespace inmobiliariaApi.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener usuarios paginados");
+                _logger.LogError(ex, "Error al obtener usuarios paginados para tenant: {TenantId}", inmobiliariaId);
                 return new BaseResponseDto<PaginatedResponseDto<UsuarioResponseDto>>
                 {
                     Success = false,
@@ -189,15 +199,124 @@ namespace inmobiliariaApi.Services
             }
         }
 
-        public async Task<BaseResponseDto<Usuario>> CreateUsuarioAsync(CreateUsuarioDto createDto)
+        public async Task<BaseResponseDto<UsuarioResponseDto>> GetUsuarioByIdAndTenantAsync(int id, int tenantId)
         {
             try
             {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(id, tenantId);
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = $"No se encontró un usuario con el ID {id} en su organización.",
+                    };
+                }
+
+                var usuarioDto = MapToResponseDto(usuario);
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = true,
+                    Data = usuarioDto,
+                    Message = "Usuario encontrado",
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener usuario por ID: {Id} y Tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = false,
+                    Message = $"Error al buscar el usuario. Por favor, intente nuevamente.",
+                    Errors = new List<string> { "Error interno del servidor." },
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<IEnumerable<UsuarioResponseDto>>> GetActiveUsuariosByTenantAsync(int tenantId)
+        {
+            try
+            {
+                var usuarios = await _usuarioRepository.GetActiveUsersByTenantAsync(tenantId);
+                var usuariosDto = usuarios.Select(MapToResponseDto).ToList();
+
+                return new BaseResponseDto<IEnumerable<UsuarioResponseDto>>
+                {
+                    Success = true,
+                    Data = usuariosDto,
+                    Message = "Usuarios activos obtenidos correctamente",
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener usuarios activos del tenant: {TenantId}", tenantId);
+                return new BaseResponseDto<IEnumerable<UsuarioResponseDto>>
+                {
+                    Success = false,
+                    Message = "Error al cargar usuarios activos.",
+                    Errors = new List<string> { "Error interno del servidor." },
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<UsuarioResponseDto>> CreateUsuarioAsync(CreateUsuarioDto createDto)
+        {
+            try
+            {
+                _logger.LogInformation("Iniciando creación de usuario con email: {Email}", createDto.Email);
+
+                // Validaciones básicas
+                if (string.IsNullOrWhiteSpace(createDto.Email))
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "El email es obligatorio."
+                    };
+                }
+
+                if (string.IsNullOrWhiteSpace(createDto.Nombre))
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "El nombre es obligatorio."
+                    };
+                }
+
+                if (string.IsNullOrWhiteSpace(createDto.Password))
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "La contraseña es obligatoria."
+                    };
+                }
+
+                if (createDto.IdInmobiliaria <= 0)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "Debe especificar una inmobiliaria válida."
+                    };
+                }
+
+                if (createDto.IdRol <= 0)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "Debe especificar un rol válido."
+                    };
+                }
+
                 // Validar si el email ya existe
                 var existingEmail = await _usuarioRepository.GetByEmailAsync(createDto.Email);
                 if (existingEmail != null)
                 {
-                    return new BaseResponseDto<Usuario>
+                    _logger.LogWarning("Intento de crear usuario con email existente: {Email}", createDto.Email);
+                    return new BaseResponseDto<UsuarioResponseDto>
                     {
                         Success = false,
                         Message = $"Ya existe un usuario registrado con el email {createDto.Email}. Por favor, use un email diferente.",
@@ -217,26 +336,35 @@ namespace inmobiliariaApi.Services
                 };
 
                 // Hashear la contraseña
+                _logger.LogInformation("Hasheando contraseña para usuario: {Email}", createDto.Email);
                 usuario.HashContrasena = HashPassword(createDto.Password);
 
+                _logger.LogInformation("Guardando usuario en base de datos: {Email}", createDto.Email);
                 var result = await _usuarioRepository.AddAsync(usuario);
-                return new BaseResponseDto<Usuario>
+
+                _logger.LogInformation("Usuario creado exitosamente con ID: {Id}", result.Id);
+
+                // Cargar el usuario con rol para la respuesta
+                var usuarioConRol = await _usuarioRepository.GetByIdWithRolAsync(result.Id);
+                var responseDto = MapToResponseDto(usuarioConRol ?? result);
+
+                return new BaseResponseDto<UsuarioResponseDto>
                 {
                     Success = true,
-                    Data = result,
+                    Data = responseDto,
                     Message = $"El usuario {createDto.Nombre} ha sido creado exitosamente.",
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al crear usuario: {Message}", ex.Message);
-                return new BaseResponseDto<Usuario>
+                _logger.LogError(ex, "Error al crear usuario: {Email}. Error: {Message}", createDto?.Email, ex.Message);
+                return new BaseResponseDto<UsuarioResponseDto>
                 {
                     Success = false,
                     Message = "No se pudo crear el usuario. Por favor, verifique los datos ingresados e intente nuevamente.",
                     Errors = new List<string>
                     {
-                        "Error interno del servidor al procesar la solicitud.",
+                        $"Error interno: {ex.Message}",
                     },
                 };
             }
@@ -313,6 +441,92 @@ namespace inmobiliariaApi.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al actualizar usuario: {Id}", updateDto.Id);
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = false,
+                    Message = "No se pudieron actualizar los datos del usuario. Por favor, intente nuevamente.",
+                    Errors = new List<string>
+                    {
+                        "Error interno del servidor al procesar la solicitud.",
+                    },
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<UsuarioResponseDto>> UpdateUsuarioAsync(UpdateUsuarioDto updateDto, int tenantId)
+        {
+            try
+            {
+                var existingUser = await _usuarioRepository.GetByIdWithRolAndTenantAsync(updateDto.Id, tenantId);
+                if (existingUser == null)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = $"No se encontró un usuario con el ID {updateDto.Id} en su organización.",
+                    };
+                }
+
+                // Validar email único si se modifica
+                if (!string.IsNullOrEmpty(updateDto.Email) && updateDto.Email != existingUser.Email)
+                {
+                    var existingEmail = await _usuarioRepository.GetByEmailAsync(updateDto.Email);
+                    if (existingEmail != null)
+                    {
+                        return new BaseResponseDto<UsuarioResponseDto>
+                        {
+                            Success = false,
+                            Message = $"Ya existe otro usuario registrado con el email {updateDto.Email}. Por favor, use un email diferente.",
+                        };
+                    }
+                }
+
+                // Actualizar campos
+                if (!string.IsNullOrEmpty(updateDto.Nombre))
+                    existingUser.Nombre = updateDto.Nombre;
+
+                if (!string.IsNullOrEmpty(updateDto.Email))
+                    existingUser.Email = updateDto.Email;
+
+                if (updateDto.Telefono != null)
+                    existingUser.Telefono = updateDto.Telefono;
+
+                if (updateDto.IdRol.HasValue)
+                    existingUser.IdRol = updateDto.IdRol.Value;
+
+                if (updateDto.IdInmobiliaria.HasValue)
+                    existingUser.IdInmobiliaria = updateDto.IdInmobiliaria.Value;
+
+                if (updateDto.IdEstado.HasValue)
+                    existingUser.IdEstado = updateDto.IdEstado.Value;
+
+                // Asegurar que no cambie de tenant
+                updateDto.IdInmobiliaria = tenantId;
+
+                // Actualizar contraseña si se envía
+                if (!string.IsNullOrEmpty(updateDto.Password))
+                {
+                    existingUser.HashContrasena = HashPassword(updateDto.Password);
+                }
+
+                existingUser.ActualizadoEn = DateTime.UtcNow;
+
+                await _usuarioRepository.UpdateAsync(existingUser);
+
+                // Cargar el usuario actualizado para la respuesta
+                var updatedUser = await _usuarioRepository.GetByIdWithRolAsync(existingUser.Id);
+                var responseDto = MapToResponseDto(updatedUser ?? existingUser);
+
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = true,
+                    Data = responseDto,
+                    Message = $"Los datos del usuario {existingUser.Nombre} han sido actualizados correctamente.",
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar usuario: {Id} en tenant: {TenantId}", updateDto.Id, tenantId);
                 return new BaseResponseDto<UsuarioResponseDto>
                 {
                     Success = false,
@@ -497,6 +711,272 @@ namespace inmobiliariaApi.Services
                     {
                         "Error interno del servidor al procesar la solicitud.",
                     },
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<UsuarioResponseDto>> GetMyselfAsync(int userId, int tenantId)
+        {
+            try
+            {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(userId, tenantId);
+
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "No se encontró el usuario en su organización.",
+                    };
+                }
+
+                if (usuario.IdEstado != 1)
+                {
+                    return new BaseResponseDto<UsuarioResponseDto>
+                    {
+                        Success = false,
+                        Message = "Su cuenta se encuentra inactiva. Por favor, contacte al administrador del sistema.",
+                    };
+                }
+
+                var usuarioDto = MapToResponseDto(usuario);
+
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = true,
+                    Data = usuarioDto,
+                    Message = "Datos del usuario obtenidos correctamente.",
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener datos del usuario ID: {UserId} en tenant: {TenantId}", userId, tenantId);
+                return new BaseResponseDto<UsuarioResponseDto>
+                {
+                    Success = false,
+                    Message = "No se pudieron obtener sus datos. Por favor, intente nuevamente.",
+                    Errors = new List<string>
+                    {
+                        "Error interno del servidor al procesar la solicitud.",
+                    },
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<object>> DeleteAsync(int id, int tenantId)
+        {
+            try
+            {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(id, tenantId);
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Usuario no encontrado en su organización."
+                    };
+                }
+
+                // Verificar que el usuario no esté ya inactivo
+                if (usuario.IdEstado == 3)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "El usuario ya se encuentra inactivo."
+                    };
+                }
+
+                // Eliminación lógica: cambiar estado a 3 (inactivo)
+                usuario.IdEstado = 3;
+                usuario.ActualizadoEn = DateTime.UtcNow;
+
+                await _usuarioRepository.UpdateAsync(usuario);
+
+                _logger.LogInformation("Usuario ID: {Id} marcado como inactivo en tenant: {TenantId}", id, tenantId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Usuario desvinculado correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al desvincular usuario: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al desvincular usuario.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<object>> ToggleEstadoAsync(int id, int tenantId)
+        {
+            try
+            {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(id, tenantId);
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Usuario no encontrado en su organización."
+                    };
+                }
+
+                // Toggle entre activo (1) y bloqueado (2), no tocar inactivo (3)
+                if (usuario.IdEstado == 3)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "No se puede cambiar el estado de un usuario inactivo. Debe reactivarlo primero."
+                    };
+                }
+
+                usuario.IdEstado = usuario.IdEstado == 1 ? 2 : 1;
+                usuario.ActualizadoEn = DateTime.UtcNow;
+
+                await _usuarioRepository.UpdateAsync(usuario);
+
+                string nuevoEstado = usuario.IdEstado switch
+                {
+                    1 => "activo",
+                    2 => "bloqueado",
+                    _ => "desconocido"
+                };
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = $"Estado del usuario actualizado a {nuevoEstado}."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al cambiar estado del usuario: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al cambiar estado.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        // Método adicional para reactivar usuario inactivo
+        public async Task<BaseResponseDto<object>> ReactivateUserAsync(int id, int tenantId)
+        {
+            try
+            {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(id, tenantId);
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Usuario no encontrado en su organización."
+                    };
+                }
+
+                if (usuario.IdEstado != 3)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Solo se pueden reactivar usuarios inactivos."
+                    };
+                }
+
+                // Reactivar como activo
+                usuario.IdEstado = 1;
+                usuario.ActualizadoEn = DateTime.UtcNow;
+
+                await _usuarioRepository.UpdateAsync(usuario);
+
+                _logger.LogInformation("Usuario ID: {Id} reactivado en tenant: {TenantId}", id, tenantId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Usuario reactivado correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al reactivar usuario: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al reactivar usuario.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<object>> ChangePasswordAsync(int userId, ChangePasswordDto changePasswordDto, int tenantId)
+        {
+            try
+            {
+                var usuario = await _usuarioRepository.GetByIdWithRolAndTenantAsync(userId, tenantId);
+                if (usuario == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Usuario no encontrado en su organización."
+                    };
+                }
+
+                // Verificar que el usuario está activo
+                if (usuario.IdEstado != 1)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Su cuenta se encuentra inactiva. No puede cambiar la contraseña."
+                    };
+                }
+
+                // Validar contraseña actual
+                var isCurrentPasswordValid = await _usuarioRepository.ValidateCredentialsAsync(usuario.Email, changePasswordDto.CurrentPassword);
+                if (!isCurrentPasswordValid)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "La contraseña actual es incorrecta."
+                    };
+                }
+
+                // Hashear la nueva contraseña
+                usuario.HashContrasena = HashPassword(changePasswordDto.NewPassword);
+                usuario.ActualizadoEn = DateTime.UtcNow;
+                usuario.HashContrasena = HashPassword(changePasswordDto.NewPassword);
+                await _usuarioRepository.UpdateAsync(usuario);
+
+                _logger.LogInformation("Contraseña cambiada exitosamente para usuario ID: {UserId}", userId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Su contraseña ha sido cambiada exitosamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al cambiar contraseña para usuario ID: {UserId} en tenant: {TenantId}", userId, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "No se pudo cambiar la contraseña. Por favor, intente nuevamente.",
+                    Errors = new List<string>
+                    {
+                        "Error interno del servidor al procesar la solicitud."
+                    }
                 };
             }
         }
