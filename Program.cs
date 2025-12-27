@@ -169,6 +169,7 @@ builder.Services.AddSingleton(builder.Configuration);
 var app = builder.Build();
 
 // Middleware
+app.UseMiddleware<TenantValidationMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

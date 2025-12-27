@@ -86,7 +86,6 @@ namespace inmobiliariaApi.Controllers
                         usuario.Id,
                         usuario.Nombre,
                         usuario.Email,
-                        usuario.Telefono,
                         usuario.IdRol,
                         RolNombre = usuario.Rol?.Nombre,
                         usuario.IdEstado,
@@ -110,6 +109,7 @@ namespace inmobiliariaApi.Controllers
                 new Claim(ClaimTypes.Email, usuario.Email ?? ""),
                 new Claim(ClaimTypes.Name, usuario.Nombre ?? ""),
                 new Claim(ClaimTypes.Role, usuario.Rol?.Nombre ?? "Usuario"),
+                new Claim("IdInmobiliaria", usuario.IdInmobiliaria.ToString())
             };
 
             var tokenDescriptor = new SecurityTokenDescriptor
