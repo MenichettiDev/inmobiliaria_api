@@ -17,8 +17,8 @@ namespace inmobiliariaApi.Models
         public virtual ICollection<Usuario> Usuarios { get; set; } = new List<Usuario>();
     }
 }
-
-// 1	administrador
-// 2	supervisor
-// 3	agente
-// 4	asistente
+// 1	Programador
+// 2	Administrador
+// 3	Supervisor
+// 4	Agente
+// 6	Asistente

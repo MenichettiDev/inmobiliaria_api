@@ -2,7 +2,7 @@ namespace inmobiliariaApi.DTOs.Rol
 {
     public class RolDto
     {
-        public int IdRol { get; set; }
-        public string NombreRol { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string Nombre { get; set; } = string.Empty;
     }
 }
