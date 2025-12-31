@@ -74,6 +74,7 @@ builder.Services.AddScoped(typeof(GenericRepository<>));
 builder.Services.AddScoped<UsuarioRepository>();
 builder.Services.AddScoped<LeadRepository>();
 builder.Services.AddScoped<PropiedadRepository>();
+builder.Services.AddScoped<LeadEstadoHistorialRepository>();
 
 //Services
 builder.Services.AddScoped(typeof(GenericService<>));
@@ -81,6 +82,7 @@ builder.Services.AddScoped<UsuarioService>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.AddScoped<IUsoMensualService, UsoMensualService>();
 builder.Services.AddScoped<PropiedadService>();
+builder.Services.AddScoped<LeadEstadoHistorialService>();
 
 // Tenant Context - Multi-tenancy
 builder.Services.AddHttpContextAccessor();
