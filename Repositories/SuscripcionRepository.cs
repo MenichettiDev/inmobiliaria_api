@@ -83,9 +83,9 @@ namespace inmobiliariaApi.Repositories
             return await _dbSet
                 .Include(s => s.Inmobiliaria)
                 .Include(s => s.Estado)
-                .Where(s => s.IdInmobiliaria == inmobiliariaId && 
-                           s.IdEstado == 1 && 
-                           s.Inicio <= ahora && 
+                .Where(s => s.IdInmobiliaria == inmobiliariaId &&
+                           s.IdEstado == 1 &&
+                           s.Inicio <= ahora &&
                            s.Fin >= ahora)
                 .OrderByDescending(s => s.Fin)
                 .FirstOrDefaultAsync();
@@ -107,8 +107,8 @@ namespace inmobiliariaApi.Repositories
             return await _dbSet
                 .Include(s => s.Inmobiliaria)
                 .Include(s => s.Estado)
-                .Where(s => s.IdEstado == 1 && 
-                           s.Fin <= fechaLimite && 
+                .Where(s => s.IdEstado == 1 &&
+                           s.Fin <= fechaLimite &&
                            s.Fin >= DateTime.UtcNow)
                 .OrderBy(s => s.Fin)
                 .ToListAsync();
@@ -133,9 +133,9 @@ namespace inmobiliariaApi.Repositories
             return await _dbSet
                 .Include(s => s.Inmobiliaria)
                 .Include(s => s.Estado)
-                .Where(s => s.IdEstado == 1 && 
-                           s.RenovacionAutomatica && 
-                           s.Fin >= ahora && 
+                .Where(s => s.IdEstado == 1 &&
+                           s.RenovacionAutomatica &&
+                           s.Fin >= ahora &&
                            s.Fin <= en30Dias)
                 .OrderBy(s => s.Fin)
                 .ToListAsync();
@@ -156,9 +156,9 @@ namespace inmobiliariaApi.Repositories
         public async Task<bool> HasActiveSuscripcionAsync(int inmobiliariaId, int? excludeId = null)
         {
             var ahora = DateTime.UtcNow;
-            var query = _dbSet.Where(s => s.IdInmobiliaria == inmobiliariaId && 
-                                         s.IdEstado == 1 && 
-                                         s.Inicio <= ahora && 
+            var query = _dbSet.Where(s => s.IdInmobiliaria == inmobiliariaId &&
+                                         s.IdEstado == 1 &&
+                                         s.Inicio <= ahora &&
                                          s.Fin >= ahora);
 
             if (excludeId.HasValue)
@@ -173,9 +173,9 @@ namespace inmobiliariaApi.Repositories
         {
             var ahora = DateTime.UtcNow;
             return await _dbSet
-                .CountAsync(s => s.IdPlan == planId && 
-                                s.IdEstado == 1 && 
-                                s.Inicio <= ahora && 
+                .CountAsync(s => s.IdPlan == planId &&
+                                s.IdEstado == 1 &&
+                                s.Inicio <= ahora &&
                                 s.Fin >= ahora);
         }
     }

@@ -11,7 +11,7 @@ namespace inmobiliariaApi.Services
         private readonly SuscripcionRepository _suscripcionRepository;
         private readonly ILogger<SuscripcionService> _logger;
 
-        public SuscripcionService(SuscripcionRepository suscripcionRepository, ILogger<SuscripcionService> logger) 
+        public SuscripcionService(SuscripcionRepository suscripcionRepository, ILogger<SuscripcionService> logger)
             : base(suscripcionRepository)
         {
             _suscripcionRepository = suscripcionRepository;
@@ -368,7 +368,7 @@ namespace inmobiliariaApi.Services
 
                 // Renovar suscripción
                 suscripcion.Fin = renovarDto.NuevaFechaFin.ToUniversalTime();
-                
+
                 if (renovarDto.RenovacionAutomatica.HasValue)
                     suscripcion.RenovacionAutomatica = renovarDto.RenovacionAutomatica.Value;
 
