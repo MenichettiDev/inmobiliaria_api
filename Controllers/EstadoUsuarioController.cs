@@ -107,7 +107,7 @@ namespace inmobiliariaApi.Controllers
             };
 
             var result = await _estadoUsuarioRepository.AddAsync(estado);
-            
+
             var responseDto = new EstadoUsuarioDto
             {
                 Id = result.Id,
@@ -116,7 +116,7 @@ namespace inmobiliariaApi.Controllers
                 Activo = result.Activo
             };
 
-            return CreatedAtAction(nameof(GetEstado), new { id = result.Id }, 
+            return CreatedAtAction(nameof(GetEstado), new { id = result.Id },
                 new { Success = true, Data = responseDto, Message = "Estado de usuario creado correctamente" });
         }
 
@@ -144,7 +144,7 @@ namespace inmobiliariaApi.Controllers
                 return NotFound(new { Success = false, Message = "Estado de usuario no encontrado" });
 
             // Validar que el código no exista en otro registro
-            var existingCodigo = await _estadoUsuarioRepository.FindAsync(e => 
+            var existingCodigo = await _estadoUsuarioRepository.FindAsync(e =>
                 e.Codigo.ToLower() == estadoDto.Codigo.ToLower() && e.Id != id);
             if (existingCodigo.Any())
             {
