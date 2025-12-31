@@ -23,3 +23,6 @@ namespace inmobiliariaApi.Models
         public virtual ICollection<Propiedad> Propiedades { get; set; } = new List<Propiedad>();
     }
 }
+
+// 1	activa	Propiedad visible y operativa	1
+// 2	eliminada	Propiedad eliminada lógicamente	0
