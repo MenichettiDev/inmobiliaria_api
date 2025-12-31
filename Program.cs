@@ -79,6 +79,7 @@ builder.Services.AddScoped<UsoMensualRepository>();
 builder.Services.AddScoped<ImagenPropiedadRepository>();
 builder.Services.AddScoped<BusquedasGuardadasRepository>();
 builder.Services.AddScoped<InmobiliariaRepository>();
+builder.Services.AddScoped<SuscripcionRepository>();
 
 //Services
 builder.Services.AddScoped(typeof(GenericService<>));
@@ -90,6 +91,7 @@ builder.Services.AddScoped<UsoMensualService>();
 builder.Services.AddScoped<ImagenPropiedadService>();
 builder.Services.AddScoped<BusquedasGuardadasService>();
 builder.Services.AddScoped<InmobiliariaService>();
+builder.Services.AddScoped<SuscripcionService>();
 
 // Tenant Context - Multi-tenancy
 builder.Services.AddHttpContextAccessor();
