@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using inmobiliariaApi.DTOs.Lead;
 using inmobiliariaApi.Services;
-using inmobiliariaApi.Extensions;
-using System.ComponentModel.DataAnnotations;
 
 namespace inmobiliariaApi.Controllers
 {
@@ -13,287 +11,245 @@ namespace inmobiliariaApi.Controllers
     public class LeadController : ControllerBase
     {
         private readonly LeadService _leadService;
-        private readonly IUsoMensualService _usoMensualService;
 
-        public LeadController(LeadService leadService, IUsoMensualService usoMensualService)
+        public LeadController(LeadService leadService)
         {
             _leadService = leadService;
-            _usoMensualService = usoMensualService;
         }
 
-        /// <summary>
-        /// Crear un nuevo lead desde formulario
-        /// </summary>
-        [HttpPost]
-        public async Task<IActionResult> Store([FromBody] CreateLeadDto createLeadDto)
+        private int GetTenantId()
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Datos de entrada no válidos",
-                    Errors = ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                        .ToList()
-                });
-            }
-
-            var usuarioId = User.GetUserId();
-            if (!usuarioId.HasValue)
-            {
-                return Unauthorized(new
-                {
-                    Success = false,
-                    Message = "Usuario no autenticado"
-                });
-            }
-
-            var response = await _leadService.CrearLeadDesdeFormularioAsync(createLeadDto, usuarioId.Value);
-
-            if (!response.Success)
-            {
-                return BadRequest(response);
-            }
-
-            return CreatedAtAction(nameof(GetById), new { id = response.Data!.Id }, response);
+            var tenantClaim = User.FindFirst("IdInmobiliaria");
+            return tenantClaim != null ? int.Parse(tenantClaim.Value) : 0;
         }
 
-        /// <summary>
-        /// Actualizar un lead existente
-        /// </summary>
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateLeadDto updateLeadDto)
+        private int GetUserId()
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Datos de entrada no válidos",
-                    Errors = ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                        .ToList()
-                });
-            }
-
-            var usuarioId = User.GetUserId();
-            if (!usuarioId.HasValue)
-            {
-                return Unauthorized(new
-                {
-                    Success = false,
-                    Message = "Usuario no autenticado"
-                });
-            }
-
-            var response = await _leadService.ActualizarLeadAsync(id, updateLeadDto, usuarioId.Value);
-
-            if (!response.Success)
-            {
-                if (response.Message.Contains("no encontrado"))
-                    return NotFound(response);
-                return BadRequest(response);
-            }
-
-            return Ok(response);
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            return userIdClaim != null ? int.Parse(userIdClaim.Value) : 0;
         }
 
-        /// <summary>
-        /// Obtener lista de leads con filtros y paginación
-        /// </summary>
+        // GET: api/lead (Leads paginados)
         [HttpGet]
-        public async Task<IActionResult> Index([FromQuery] LeadFiltrosDto filtros)
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> GetLeads(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? nombre = null,
+            [FromQuery] int? estadoId = null,
+            [FromQuery] int? fuenteId = null,
+            [FromQuery] int? usuarioAsignadoId = null,
+            [FromQuery] int? propiedadId = null,
+            [FromQuery] int? estadoAdminId = null)
         {
-            // Validar parámetros de paginación
-            if (filtros.Page < 1)
-                filtros.Page = 1;
+            var tenantId = GetTenantId();
 
-            if (filtros.PageSize < 1 || filtros.PageSize > 100)
-                filtros.PageSize = 10;
-
-            var response = await _leadService.GetLeadsConFiltrosAsync(filtros);
-
-            if (!response.Success)
+            if (tenantId <= 0)
             {
-                return BadRequest(response);
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
             }
 
-            return Ok(response);
+            var response = await _leadService.GetLeadsPaginatedAsync(
+                page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, estadoAdminId);
+
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
         }
 
-        /// <summary>
-        /// Obtener un lead específico por ID
-        /// </summary>
+        // GET: api/lead/{id} (Lead específico)
         [HttpGet("{id}")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
         public async Task<IActionResult> GetById(int id)
         {
-            var response = await _leadService.GetByIdAsync(id);
-
-            if (!response.Success)
+            if (id <= 0)
             {
-                return NotFound(response);
+                return BadRequest(new { Success = false, Message = "El ID debe ser mayor a 0." });
             }
 
-            return Ok(response);
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _leadService.GetByIdAndTenantAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return NotFound(response);
         }
 
-        /// <summary>
-        /// Asignar lead a un usuario
-        /// </summary>
-        [HttpPost("{id}/asignar")]
-        public async Task<IActionResult> AsignarUsuario(int id, [FromBody] AsignarUsuarioDto asignarDto)
+        // POST: api/lead (Crear lead)
+        [HttpPost]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> Create([FromBody] CreateLeadDto createDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Datos de entrada no válidos",
-                    Errors = ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                        .ToList()
-                });
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
             }
 
-            var usuarioActualId = User.GetUserId();
-            if (!usuarioActualId.HasValue)
+            var tenantId = GetTenantId();
+            var userId = GetUserId();
+
+            if (tenantId <= 0 || userId <= 0)
             {
-                return Unauthorized(new
-                {
-                    Success = false,
-                    Message = "Usuario no autenticado"
-                });
+                return BadRequest(new { Success = false, Message = "Usuario o tenant no válido." });
             }
 
-            var response = await _leadService.AsignarLeadAUsuarioAsync(id, asignarDto.IdUsuario, usuarioActualId.Value);
-
-            if (!response.Success)
+            // Validaciones adicionales
+            if (string.IsNullOrWhiteSpace(createDto.NombreCompleto))
             {
-                if (response.Message.Contains("no encontrado"))
-                    return NotFound(response);
-                return BadRequest(response);
+                return BadRequest(new { Success = false, Message = "El nombre completo es obligatorio." });
             }
 
-            return Ok(response);
+            if (createDto.IdFuente <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "La fuente de contacto es obligatoria." });
+            }
+
+            if (string.IsNullOrWhiteSpace(createDto.Email) && string.IsNullOrWhiteSpace(createDto.Telefono))
+            {
+                return BadRequest(new { Success = false, Message = "Debe proporcionar al menos un email o teléfono." });
+            }
+
+            var response = await _leadService.CreateLeadAsync(createDto, tenantId, userId);
+            if (response.Success)
+                return CreatedAtAction(nameof(GetById), new { id = response.Data?.Id }, response);
+            return BadRequest(response);
         }
 
-        /// <summary>
-        /// Cambiar estado de un lead
-        /// </summary>
-        [HttpPost("{id}/cambiar-estado")]
-        public async Task<IActionResult> CambiarEstado(int id, [FromBody] CambiarEstadoLeadDto cambiarEstadoDto)
+        // PUT: api/lead/{id} (Actualizar lead)
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateLeadDto updateDto)
         {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Datos de entrada no válidos",
-                    Errors = ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                        .ToList()
-                });
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
             }
 
-            var usuarioId = User.GetUserId();
-            if (!usuarioId.HasValue)
+            if (id != updateDto.Id)
+                return BadRequest(new { Success = false, Message = "ID no coincide." });
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
             {
-                return Unauthorized(new
-                {
-                    Success = false,
-                    Message = "Usuario no autenticado"
-                });
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
             }
 
-            var response = await _leadService.ActualizarEstadoConHistorialAsync(
-                id,
-                cambiarEstadoDto.IdNuevoEstado,
-                usuarioId.Value,
-                cambiarEstadoDto.Comentario);
-
-            if (!response.Success)
-            {
-                if (response.Message.Contains("no encontrado"))
-                    return NotFound(response);
-                return BadRequest(response);
-            }
-
-            return Ok(response);
+            var response = await _leadService.UpdateLeadAsync(updateDto, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
         }
 
-        /// <summary>
-        /// Eliminar (marcar como eliminado) un lead
-        /// </summary>
+        // DELETE: api/lead/{id} (Eliminar lead)
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Administrador,Supervisor")]
         public async Task<IActionResult> Delete(int id)
         {
-            var usuarioId = User.GetUserId();
-            if (!usuarioId.HasValue)
+            if (id <= 0)
             {
-                return Unauthorized(new
-                {
-                    Success = false,
-                    Message = "Usuario no autenticado"
-                });
+                return BadRequest(new { Success = false, Message = "ID no válido." });
             }
 
-            var response = await _leadService.EliminarLeadAsync(id, usuarioId.Value);
+            var tenantId = GetTenantId();
 
-            if (!response.Success)
+            if (tenantId <= 0)
             {
-                if (response.Message.Contains("no encontrado"))
-                    return NotFound(response);
-                return BadRequest(response);
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
             }
 
-            return Ok(response);
+            var response = await _leadService.DeleteAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
         }
 
-        /// <summary>
-        /// Obtener estadísticas de uso de leads para el mes actual
-        /// </summary>
-        [HttpGet("estadisticas/uso-mensual")]
-        public async Task<IActionResult> GetUsoMensual()
+        // POST: api/lead/{id}/cambiar-estado (Cambiar estado del lead)
+        [HttpPost("{id}/cambiar-estado")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> CambiarEstado(int id, [FromBody] CambiarEstadoLeadDto cambioDto)
         {
-            try
+            if (id <= 0)
             {
-                var (usados, limite) = await _usoMensualService.GetUsoLeadsActualAsync();
-                var porcentaje = limite > 0 ? (double)usados / limite * 100 : 0;
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
 
-                return Ok(new
-                {
-                    Success = true,
-                    Data = new
-                    {
-                        LeadsUsados = usados,
-                        LimiteLeads = limite,
-                        PorcentajeUso = Math.Round(porcentaje, 2),
-                        LeadsDisponibles = Math.Max(0, limite - usados)
-                    },
-                    Message = "Estadísticas obtenidas exitosamente"
-                });
-            }
-            catch (Exception ex)
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Error al obtener estadísticas de uso",
-                    Errors = new List<string> { ex.Message }
-                });
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
             }
+
+            if (id != cambioDto.IdLead)
+                return BadRequest(new { Success = false, Message = "ID no coincide." });
+
+            var tenantId = GetTenantId();
+            var userId = GetUserId();
+
+            if (tenantId <= 0 || userId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Usuario o tenant no válido." });
+            }
+
+            if (cambioDto.IdEstadoNuevo <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El nuevo estado es obligatorio." });
+            }
+
+            var response = await _leadService.CambiarEstadoAsync(cambioDto, tenantId, userId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
         }
-    }
 
-    // DTO para asignación de usuario
-    public class AsignarUsuarioDto
-    {
-        [Required(ErrorMessage = "El ID del usuario es obligatorio")]
-        public int IdUsuario { get; set; }
+        // POST: api/lead/{id}/asignar (Asignar usuario al lead)
+        [HttpPost("{id}/asignar")]
+        [Authorize(Roles = "Administrador,Supervisor")]
+        public async Task<IActionResult> AsignarUsuario(int id, [FromBody] AsignarLeadDto asignacionDto)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
+            }
+
+            if (id != asignacionDto.IdLead)
+                return BadRequest(new { Success = false, Message = "ID no coincide." });
+
+            var tenantId = GetTenantId();
+            var userId = GetUserId();
+
+            if (tenantId <= 0 || userId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Usuario o tenant no válido." });
+            }
+
+            if (asignacionDto.IdUsuarioAsignado <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El usuario asignado es obligatorio." });
+            }
+
+            var response = await _leadService.AsignarUsuarioAsync(asignacionDto, tenantId, userId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
     }
 }

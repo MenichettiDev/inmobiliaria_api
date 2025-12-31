@@ -83,7 +83,6 @@ builder.Services.AddScoped<BusquedasGuardadasRepository>();
 builder.Services.AddScoped(typeof(GenericService<>));
 builder.Services.AddScoped<UsuarioService>();
 builder.Services.AddScoped<LeadService>();
-builder.Services.AddScoped<UsoMensualService>();
 builder.Services.AddScoped<PropiedadService>();
 builder.Services.AddScoped<LeadEstadoHistorialService>();
 builder.Services.AddScoped<UsoMensualService>();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using inmobiliariaApi.Data;
 using inmobiliariaApi.Models;
 using inmobiliariaApi.Services;
@@ -11,11 +12,13 @@ namespace inmobiliariaApi.Repositories
     public class LeadRepository : GenericRepository<Lead>
     {
         private readonly ITenantContext _tenantContext;
+        private readonly ILogger<LeadRepository> _logger;
 
-        public LeadRepository(ApplicationDbContext context, ITenantContext tenantContext)
+        public LeadRepository(ApplicationDbContext context, ITenantContext tenantContext, ILogger<LeadRepository> logger)
             : base(context)
         {
             _tenantContext = tenantContext;
+            _logger = logger;
         }
 
         // Sobrescribir métodos base para agregar filtro de tenant
@@ -226,6 +229,126 @@ namespace inmobiliariaApi.Repositories
             entity.ActualizadoEn = DateTime.UtcNow;
             await base.UpdateAsync(entity);
             return entity;
+        }
+
+        public async Task<IEnumerable<Lead>> GetByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(l => l.Propiedad)
+                .Include(l => l.Inmobiliaria)
+                .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Fuente)
+                .Include(l => l.Estado)
+                .Include(l => l.EstadoAdmin)
+                .Where(l => l.IdInmobiliaria == tenantId)
+                .OrderByDescending(l => l.CreadoEn)
+                .ToListAsync();
+        }
+
+        public async Task<Lead?> GetByIdAndTenantAsync(int id, int tenantId)
+        {
+            return await _dbSet
+                .Include(l => l.Propiedad)
+                .Include(l => l.Inmobiliaria)
+                .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Fuente)
+                .Include(l => l.Estado)
+                .Include(l => l.EstadoAdmin)
+                .FirstOrDefaultAsync(l => l.Id == id && l.IdInmobiliaria == tenantId);
+        }
+
+        public async Task<(IEnumerable<Lead> Data, int TotalRecords)> GetPagedByTenantAsync(
+            int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? estadoAdminId = null)
+        {
+            var query = _dbSet
+                .Include(l => l.Propiedad)
+                .Include(l => l.Inmobiliaria)
+                .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Fuente)
+                .Include(l => l.Estado)
+                .Include(l => l.EstadoAdmin)
+                .Where(l => l.IdInmobiliaria == tenantId);
+
+            if (!string.IsNullOrEmpty(nombre))
+            {
+                query = query.Where(l => l.NombreCompleto.Contains(nombre) ||
+                                        (l.Email != null && l.Email.Contains(nombre)));
+            }
+
+            if (estadoId.HasValue)
+            {
+                query = query.Where(l => l.IdEstado == estadoId.Value);
+            }
+
+            if (fuenteId.HasValue)
+            {
+                query = query.Where(l => l.IdFuente == fuenteId.Value);
+            }
+
+            if (usuarioAsignadoId.HasValue)
+            {
+                if (usuarioAsignadoId.Value == 0)
+                    query = query.Where(l => l.IdUsuarioAsignado == null);
+                else
+                    query = query.Where(l => l.IdUsuarioAsignado == usuarioAsignadoId.Value);
+            }
+
+            if (propiedadId.HasValue)
+            {
+                query = query.Where(l => l.IdPropiedad == propiedadId.Value);
+            }
+
+            if (estadoAdminId.HasValue)
+            {
+                query = query.Where(l => l.IdEstadoAdmin == estadoAdminId.Value);
+            }
+
+            var totalRecords = await query.CountAsync();
+            var data = await query
+                .OrderByDescending(l => l.CreadoEn)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (data, totalRecords);
+        }
+
+        public async Task<bool> ValidatePropiedadInTenantAsync(int propiedadId, int tenantId)
+        {
+            return await _context.Propiedad
+                .AnyAsync(p => p.Id == propiedadId && p.IdInmobiliaria == tenantId);
+        }
+
+        public async Task<bool> ValidateUsuarioInTenantAsync(int usuarioId, int tenantId)
+        {
+            return await _context.Usuario
+                .AnyAsync(u => u.Id == usuarioId && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
+        }
+
+        public async Task<int> GetCountByFuenteAndTenantAsync(int fuenteId, int tenantId, DateTime? desde = null, DateTime? hasta = null)
+        {
+            var query = _dbSet.Where(l => l.IdFuente == fuenteId && l.IdInmobiliaria == tenantId);
+
+            if (desde.HasValue)
+                query = query.Where(l => l.CreadoEn >= desde.Value);
+
+            if (hasta.HasValue)
+                query = query.Where(l => l.CreadoEn <= hasta.Value);
+
+            return await query.CountAsync();
+        }
+
+        public async Task<IEnumerable<Lead>> GetLeadsActivosByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(l => l.Propiedad)
+                .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Fuente)
+                .Include(l => l.Estado)
+                .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin == 1)
+                .OrderByDescending(l => l.CreadoEn)
+                .ToListAsync();
         }
     }
 }

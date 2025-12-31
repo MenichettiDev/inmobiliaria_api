@@ -20,13 +20,13 @@ namespace inmobiliariaApi.Controllers
 
         // GET: api/rol (Lista de todos los roles)
         [HttpGet]
-        [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos pueden consultar roles
+        [Authorize(Roles = "Programador,Administrador,Supervisor,Agente")] // Todos pueden consultar roles
         public async Task<IActionResult> GetRoles()
         {
             var roles = await _rolRepository.GetAllAsync();
 
-            // Mapear a DTO
-            var result = roles.Select(r => new
+            // Mapear a DTO limpio
+            var result = roles.Select(r => new RolDto
             {
                 Id = r.Id,
                 Nombre = r.Nombre
@@ -37,14 +37,20 @@ namespace inmobiliariaApi.Controllers
 
         // GET: api/rol/{id} (Un rol específico)
         [HttpGet("{id}")]
-        [Authorize(Roles = "SuperAdmin,Administrador,Supervisor,Operario")] // Todos pueden consultar roles específicos
+        [Authorize(Roles = "Programador,Administrador,Supervisor,Agente")]
         public async Task<IActionResult> GetRol(int id)
         {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El ID debe ser mayor a 0." });
+            }
+
             var rol = await _rolRepository.GetByIdAsync(id);
             if (rol == null)
                 return NotFound(new { Success = false, Message = "Rol no encontrado" });
 
-            return Ok(new { Success = true, Data = new { rol.Id, rol.Nombre }, Message = "Rol encontrado" });
+            var result = new RolDto { Id = rol.Id, Nombre = rol.Nombre };
+            return Ok(new { Success = true, Data = result, Message = "Rol encontrado" });
         }
 
         // POST: api/rol (Crear un nuevo rol)
@@ -67,21 +73,46 @@ namespace inmobiliariaApi.Controllers
 
         // PUT: api/rol/{id} (Actualizar rol)
         [HttpPut("{id}")]
-        [Authorize(Roles = "Programador")] // Solo Programador puede actualizar roles
+        [Authorize(Roles = "Programador")]
         public async Task<IActionResult> PutRol(int id, [FromBody] UpdateRolDto rolDto)
         {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
             if (!ModelState.IsValid)
-                return BadRequest(new { Success = false, Message = "Datos no válidos", Errors = ModelState.Values });
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(new { Success = false, Message = "Datos no válidos", Errors = errors });
+            }
+
+            if (id != rolDto.Id)
+                return BadRequest(new { Success = false, Message = "El ID de la URL no coincide con el ID del objeto" });
 
             var existingRol = await _rolRepository.GetByIdAsync(id);
             if (existingRol == null)
                 return NotFound(new { Success = false, Message = "Rol no encontrado" });
 
-            // Solo permitir modificar el nombre
-            existingRol.Nombre = rolDto.Nombre;
+            // Proteger roles básicos del sistema (1-5)
+            if (id <= 5)
+            {
+                return BadRequest(new { Success = false, Message = "No se pueden modificar los roles básicos del sistema." });
+            }
 
+            // Validar que el nombre no exista en otro registro
+            var existingNombre = await _rolRepository.FindAsync(r =>
+                r.Nombre.ToLower() == rolDto.Nombre.ToLower() && r.Id != id);
+            if (existingNombre.Any())
+            {
+                return BadRequest(new { Success = false, Message = "Ya existe otro rol con ese nombre." });
+            }
+
+            existingRol.Nombre = rolDto.Nombre.Trim();
             await _rolRepository.UpdateAsync(existingRol);
-            return Ok(new { Success = true, Data = new { existingRol.Id, existingRol.Nombre }, Message = "Rol actualizado correctamente" });
+
+            var responseDto = new RolDto { Id = existingRol.Id, Nombre = existingRol.Nombre };
+            return Ok(new { Success = true, Data = responseDto, Message = "Rol actualizado correctamente" });
         }
 
         // DELETE: api/rol/{id} (Eliminar rol)

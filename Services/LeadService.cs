@@ -3,527 +3,512 @@ using inmobiliariaApi.DTOs.Lead;
 using inmobiliariaApi.Models;
 using inmobiliariaApi.Repositories;
 using inmobiliariaApi.Services;
-using inmobiliariaApi.Exceptions;
 using inmobiliariaApi.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace inmobiliariaApi.Services
 {
     public class LeadService : GenericService<Lead>
     {
         private readonly LeadRepository _leadRepository;
-        private readonly ITenantContext _tenantContext;
-        private readonly IUsoMensualService _usoMensualService;
+        private readonly UsoMensualService _usoMensualService;
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<LeadService> _logger;
 
         public LeadService(
             LeadRepository leadRepository,
-            ITenantContext tenantContext,
-            IUsoMensualService usoMensualService,
-            ApplicationDbContext context)
+            UsoMensualService usoMensualService,
+            ApplicationDbContext context,
+            ILogger<LeadService> logger)
             : base(leadRepository)
         {
             _leadRepository = leadRepository;
-            _tenantContext = tenantContext;
             _usoMensualService = usoMensualService;
             _context = context;
+            _logger = logger;
         }
 
-        public async Task<BaseResponseDto<LeadResponseDto>> CrearLeadDesdeFormularioAsync(CreateLeadDto createLeadDto, int usuarioId)
+        private LeadDto MapToResponseDto(Lead lead)
+        {
+            return new LeadDto
+            {
+                Id = lead.Id,
+                IdPropiedad = lead.IdPropiedad,
+                IdInmobiliaria = lead.IdInmobiliaria,
+                IdUsuarioAsignado = lead.IdUsuarioAsignado,
+                NombreCompleto = lead.NombreCompleto,
+                Email = lead.Email,
+                Telefono = lead.Telefono,
+                Mensaje = lead.Mensaje,
+                IdFuente = lead.IdFuente,
+                IdEstado = lead.IdEstado,
+                IdEstadoAdmin = lead.IdEstadoAdmin,
+                CreadoEn = lead.CreadoEn,
+                ActualizadoEn = lead.ActualizadoEn,
+                PropiedadTitulo = lead.Propiedad?.Titulo,
+                InmobiliariaNombre = lead.Inmobiliaria?.Nombre,
+                UsuarioAsignadoNombre = lead.UsuarioAsignado?.Nombre,
+                FuenteNombre = lead.Fuente?.Nombre,
+                EstadoNombre = lead.Estado?.Nombre,
+                EstadoAdminDescripcion = lead.EstadoAdmin?.Descripcion
+            };
+        }
+
+        public async Task<BaseResponseDto<PaginatedResponseDto<LeadDto>>> GetLeadsPaginatedAsync(
+            int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? estadoAdminId = null)
         {
             try
             {
-                // Validar límites del plan antes de crear
-                await _usoMensualService.ValidarLimiteLeadsAsync();
+                if (page <= 0) page = 1;
+                if (pageSize <= 0) pageSize = 10;
 
-                // Validar que la propiedad (si existe) pertenece al tenant
-                if (createLeadDto.IdPropiedad.HasValue)
+                var (leads, totalRecords) = await _leadRepository.GetPagedByTenantAsync(
+                    page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, estadoAdminId);
+
+                var leadsDto = leads.Select(MapToResponseDto).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
+
+                var paginatedResponse = new PaginatedResponseDto<LeadDto>
                 {
-                    var propiedadValida = await _leadRepository.ValidatePropertiesBelongsToTenantAsync(createLeadDto.IdPropiedad);
+                    Data = leadsDto,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalRecords = totalRecords,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                return new BaseResponseDto<PaginatedResponseDto<LeadDto>>
+                {
+                    Success = true,
+                    Data = paginatedResponse,
+                    Message = "Leads obtenidos correctamente"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener leads paginados para tenant: {TenantId}", tenantId);
+                return new BaseResponseDto<PaginatedResponseDto<LeadDto>>
+                {
+                    Success = false,
+                    Message = "No se pudieron cargar los leads.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<LeadDto>> GetByIdAndTenantAsync(int id, int tenantId)
+        {
+            try
+            {
+                var lead = await _leadRepository.GetByIdAndTenantAsync(id, tenantId);
+                if (lead == null)
+                {
+                    return new BaseResponseDto<LeadDto>
+                    {
+                        Success = false,
+                        Message = "Lead no encontrado en su organización."
+                    };
+                }
+
+                var leadDto = MapToResponseDto(lead);
+                return new BaseResponseDto<LeadDto>
+                {
+                    Success = true,
+                    Data = leadDto,
+                    Message = "Lead encontrado"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener lead por ID: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<LeadDto>
+                {
+                    Success = false,
+                    Message = "Error al buscar el lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<LeadDto>> CreateLeadAsync(CreateLeadDto createDto, int tenantId, int? usuarioCreadorId = null)
+        {
+            try
+            {
+                _logger.LogInformation("Creando lead: {Nombre} en tenant: {TenantId}", createDto.NombreCompleto, tenantId);
+
+                // Validar propiedad si se especifica
+                if (createDto.IdPropiedad.HasValue)
+                {
+                    var propiedadValida = await _leadRepository.ValidatePropiedadInTenantAsync(createDto.IdPropiedad.Value, tenantId);
                     if (!propiedadValida)
                     {
-                        return new BaseResponseDto<LeadResponseDto>
+                        return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
-                            Message = "La propiedad especificada no existe o no pertenece a su inmobiliaria",
-                            Errors = new List<string> { "ID de propiedad inválido" }
+                            Message = "La propiedad especificada no pertenece a su organización."
+                        };
+                    }
+                }
+
+                // Validar usuario asignado si se especifica
+                if (createDto.IdUsuarioAsignado.HasValue && createDto.IdUsuarioAsignado.Value > 0)
+                {
+                    var usuarioValido = await _leadRepository.ValidateUsuarioInTenantAsync(createDto.IdUsuarioAsignado.Value, tenantId);
+                    if (!usuarioValido)
+                    {
+                        return new BaseResponseDto<LeadDto>
+                        {
+                            Success = false,
+                            Message = "El usuario asignado no pertenece a su organización o no está activo."
                         };
                     }
                 }
 
                 // Validar que la fuente de contacto existe
                 var fuenteExists = await _context.FuenteContacto
-                    .AnyAsync(f => f.Id == createLeadDto.IdFuente);
+                    .AnyAsync(f => f.Id == createDto.IdFuente);
                 if (!fuenteExists)
                 {
-                    return new BaseResponseDto<LeadResponseDto>
+                    return new BaseResponseDto<LeadDto>
                     {
                         Success = false,
-                        Message = "La fuente de contacto especificada no es válida",
-                        Errors = new List<string> { "ID de fuente de contacto inválido" }
+                        Message = "La fuente de contacto especificada no es válida."
                     };
                 }
 
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
+                var lead = new Lead
                 {
-                    // Crear el lead
-                    var lead = new Lead
-                    {
-                        NombreCompleto = createLeadDto.NombreCompleto,
-                        Email = createLeadDto.Email,
-                        Telefono = createLeadDto.Telefono,
-                        Mensaje = createLeadDto.Mensaje,
-                        IdPropiedad = createLeadDto.IdPropiedad,
-                        IdFuente = createLeadDto.IdFuente,
-                        IdEstado = 1, // Nuevo por defecto
-                        CreadoEn = DateTime.UtcNow,
-                        ActualizadoEn = DateTime.UtcNow
-                    };
+                    IdPropiedad = createDto.IdPropiedad,
+                    IdInmobiliaria = tenantId,
+                    IdUsuarioAsignado = createDto.IdUsuarioAsignado,
+                    NombreCompleto = createDto.NombreCompleto.Trim(),
+                    Email = createDto.Email?.Trim(),
+                    Telefono = createDto.Telefono?.Trim(),
+                    Mensaje = createDto.Mensaje?.Trim(),
+                    IdFuente = createDto.IdFuente,
+                    IdEstado = createDto.IdEstado,
+                    IdEstadoAdmin = 1, // Por defecto activo
+                    CreadoEn = DateTime.UtcNow,
+                    ActualizadoEn = DateTime.UtcNow
+                };
 
-                    var leadCreado = await _leadRepository.AddAsync(lead);
+                var result = await _leadRepository.AddAsync(lead);
 
-                    // Crear historial inicial
+                // Incrementar contador mensual
+                await _usoMensualService.IncrementarLeadsMesActualAsync(tenantId);
+
+                // Crear historial de estado inicial
+                if (usuarioCreadorId.HasValue)
+                {
                     var historial = new LeadEstadoHistorial
                     {
-                        IdLead = leadCreado.Id,
-                        IdEstadoAnterior = 0, // Sin estado anterior
-                        IdEstadoNuevo = 1, // Nuevo
-                        IdUsuario = usuarioId,
-                        Comentario = "Lead creado desde formulario",
+                        IdLead = result.Id,
+                        IdEstadoAnterior = 0,
+                        IdEstadoNuevo = result.IdEstado,
+                        IdUsuario = usuarioCreadorId.Value,
+                        Comentario = "Lead creado",
                         CreadoEn = DateTime.UtcNow
                     };
 
                     _context.LeadEstadoHistorial.Add(historial);
                     await _context.SaveChangesAsync();
-
-                    await transaction.CommitAsync();
-
-                    // Obtener el lead completo para la respuesta
-                    var leadCompleto = await _leadRepository.GetByIdAsync(leadCreado.Id);
-                    var responseDto = MapToResponseDto(leadCompleto!);
-
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = true,
-                        Data = responseDto,
-                        Message = "Lead creado exitosamente"
-                    };
-                }
-                catch (Exception)
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            }
-            catch (LimiteDeLeadsExcedidoException ex)
-            {
-                return new BaseResponseDto<LeadResponseDto>
-                {
-                    Success = false,
-                    Message = ex.Message,
-                    Errors = new List<string> { $"Límite actual: {ex.LimiteActual}, Usados: {ex.LeadsUsados}" }
-                };
-            }
-            catch (InmobiliariaInactivaException ex)
-            {
-                return new BaseResponseDto<LeadResponseDto>
-                {
-                    Success = false,
-                    Message = ex.Message,
-                    Errors = new List<string> { $"Estado inmobiliaria: {ex.EstadoActual}" }
-                };
-            }
-            catch (Exception ex)
-            {
-                return new BaseResponseDto<LeadResponseDto>
-                {
-                    Success = false,
-                    Message = "Error al crear el lead",
-                    Errors = new List<string> { ex.Message }
-                };
-            }
-        }
-
-        public async Task<BaseResponseDto<LeadResponseDto>> AsignarLeadAUsuarioAsync(int leadId, int usuarioId, int usuarioActualId)
-        {
-            try
-            {
-                var lead = await _leadRepository.GetByIdAsync(leadId);
-                if (lead == null)
-                {
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = false,
-                        Message = "Lead no encontrado",
-                        Errors = new List<string> { $"No existe lead con ID {leadId}" }
-                    };
                 }
 
-                // Validar que el usuario pertenece al tenant
-                var usuarioValido = await _leadRepository.ValidateUsuarioAsignadoBelongsToTenantAsync(usuarioId);
-                if (!usuarioValido)
-                {
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = false,
-                        Message = "Usuario no válido para asignación",
-                        Errors = new List<string> { "El usuario no pertenece a la inmobiliaria o no está activo" }
-                    };
-                }
+                _logger.LogInformation("Lead creado exitosamente con ID: {Id}", result.Id);
 
-                lead.IdUsuarioAsignado = usuarioId;
-                lead.ActualizadoEn = DateTime.UtcNow;
+                var leadConDetalles = await _leadRepository.GetByIdAndTenantAsync(result.Id, tenantId);
+                var responseDto = MapToResponseDto(leadConDetalles ?? result);
 
-                await _context.SaveChangesAsync();
-
-                var leadActualizado = await _leadRepository.GetByIdAsync(leadId);
-                var responseDto = MapToResponseDto(leadActualizado!);
-
-                return new BaseResponseDto<LeadResponseDto>
+                return new BaseResponseDto<LeadDto>
                 {
                     Success = true,
                     Data = responseDto,
-                    Message = "Lead asignado exitosamente"
+                    Message = $"Lead {createDto.NombreCompleto} creado correctamente."
                 };
             }
             catch (Exception ex)
             {
-                return new BaseResponseDto<LeadResponseDto>
+                _logger.LogError(ex, "Error al crear lead: {Nombre} en tenant: {TenantId}", createDto?.NombreCompleto, tenantId);
+                return new BaseResponseDto<LeadDto>
                 {
                     Success = false,
-                    Message = "Error al asignar el lead",
-                    Errors = new List<string> { ex.Message }
+                    Message = "No se pudo crear el lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
                 };
             }
         }
 
-        public async Task<BaseResponseDto<LeadResponseDto>> ActualizarEstadoConHistorialAsync(
-            int leadId,
-            int nuevoEstadoId,
-            int usuarioId,
-            string? comentario = null)
+        public async Task<BaseResponseDto<LeadDto>> UpdateLeadAsync(UpdateLeadDto updateDto, int tenantId)
         {
             try
             {
-                var lead = await _leadRepository.GetByIdAsync(leadId);
-                if (lead == null)
+                var existingLead = await _leadRepository.GetByIdAndTenantAsync(updateDto.Id, tenantId);
+                if (existingLead == null)
                 {
-                    return new BaseResponseDto<LeadResponseDto>
+                    return new BaseResponseDto<LeadDto>
                     {
                         Success = false,
-                        Message = "Lead no encontrado",
-                        Errors = new List<string> { $"No existe lead con ID {leadId}" }
+                        Message = "Lead no encontrado en su organización."
                     };
                 }
 
-                // Validar que el estado existe (EstadoLead no tiene campo Activo)
-                var estadoExists = await _context.EstadoLead
-                    .AnyAsync(e => e.Id == nuevoEstadoId);
-                if (!estadoExists)
+                // Validar propiedad si se cambia
+                if (updateDto.IdPropiedad.HasValue && updateDto.IdPropiedad.Value != existingLead.IdPropiedad)
                 {
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = false,
-                        Message = "Estado no válido",
-                        Errors = new List<string> { "El estado especificado no existe" }
-                    };
-                }
-
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var estadoAnterior = lead.IdEstado;
-
-                    // Actualizar estado del lead
-                    lead.IdEstado = nuevoEstadoId;
-                    lead.ActualizadoEn = DateTime.UtcNow;
-
-                    // Crear historial
-                    var historial = new LeadEstadoHistorial
-                    {
-                        IdLead = leadId,
-                        IdEstadoAnterior = estadoAnterior,
-                        IdEstadoNuevo = nuevoEstadoId,
-                        IdUsuario = usuarioId,
-                        Comentario = comentario ?? $"Cambio automático de estado",
-                        CreadoEn = DateTime.UtcNow
-                    };
-
-                    _context.LeadEstadoHistorial.Add(historial);
-                    await _context.SaveChangesAsync();
-
-                    await transaction.CommitAsync();
-
-                    var leadActualizado = await _leadRepository.GetByIdAsync(leadId);
-                    var responseDto = MapToResponseDto(leadActualizado!);
-
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = true,
-                        Data = responseDto,
-                        Message = "Estado del lead actualizado exitosamente"
-                    };
-                }
-                catch (Exception)
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            }
-            catch (Exception ex)
-            {
-                return new BaseResponseDto<LeadResponseDto>
-                {
-                    Success = false,
-                    Message = "Error al actualizar el estado del lead",
-                    Errors = new List<string> { ex.Message }
-                };
-            }
-        }
-
-        public async Task<BaseResponseDto<PaginatedResponseDto<LeadResponseDto>>> GetLeadsConFiltrosAsync(LeadFiltrosDto filtros)
-        {
-            try
-            {
-                var (leads, totalCount) = await _leadRepository.GetLeadsConFiltrosAsync(filtros);
-
-                var leadsDto = leads.Select(MapToResponseDto).ToList();
-
-                var paginatedResponse = new PaginatedResponseDto<LeadResponseDto>
-                {
-                    Data = leadsDto,
-                    TotalRecords = totalCount,
-                    Page = filtros.Page,
-                    PageSize = filtros.PageSize,
-                    TotalPages = (int)Math.Ceiling((double)totalCount / filtros.PageSize),
-                    HasNextPage = filtros.Page < (int)Math.Ceiling((double)totalCount / filtros.PageSize),
-                    HasPreviousPage = filtros.Page > 1
-                };
-
-                return new BaseResponseDto<PaginatedResponseDto<LeadResponseDto>>
-                {
-                    Success = true,
-                    Data = paginatedResponse,
-                    Message = "Leads obtenidos exitosamente"
-                };
-            }
-            catch (Exception ex)
-            {
-                return new BaseResponseDto<PaginatedResponseDto<LeadResponseDto>>
-                {
-                    Success = false,
-                    Message = "Error al obtener los leads",
-                    Errors = new List<string> { ex.Message }
-                };
-            }
-        }
-
-        public async Task<BaseResponseDto<LeadResponseDto>> ActualizarLeadAsync(int leadId, UpdateLeadDto updateLeadDto, int usuarioId)
-        {
-            try
-            {
-                var lead = await _leadRepository.GetByIdAsync(leadId);
-                if (lead == null)
-                {
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = false,
-                        Message = "Lead no encontrado",
-                        Errors = new List<string> { $"No existe lead con ID {leadId}" }
-                    };
-                }
-
-                // Validaciones
-                if (updateLeadDto.IdPropiedad.HasValue)
-                {
-                    var propiedadValida = await _leadRepository.ValidatePropertiesBelongsToTenantAsync(updateLeadDto.IdPropiedad);
+                    var propiedadValida = await _leadRepository.ValidatePropiedadInTenantAsync(updateDto.IdPropiedad.Value, tenantId);
                     if (!propiedadValida)
                     {
-                        return new BaseResponseDto<LeadResponseDto>
+                        return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
-                            Message = "La propiedad especificada no es válida",
-                            Errors = new List<string> { "ID de propiedad inválido" }
+                            Message = "La propiedad especificada no pertenece a su organización."
                         };
                     }
                 }
 
-                if (updateLeadDto.IdUsuarioAsignado.HasValue)
+                // Validar usuario asignado si se cambia
+                if (updateDto.IdUsuarioAsignado.HasValue && updateDto.IdUsuarioAsignado.Value > 0)
                 {
-                    var usuarioValido = await _leadRepository.ValidateUsuarioAsignadoBelongsToTenantAsync(updateLeadDto.IdUsuarioAsignado);
+                    var usuarioValido = await _leadRepository.ValidateUsuarioInTenantAsync(updateDto.IdUsuarioAsignado.Value, tenantId);
                     if (!usuarioValido)
                     {
-                        return new BaseResponseDto<LeadResponseDto>
+                        return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
-                            Message = "El usuario asignado no es válido",
-                            Errors = new List<string> { "ID de usuario inválido" }
+                            Message = "El usuario asignado no pertenece a su organización o no está activo."
                         };
                     }
                 }
 
-                // Actualizar campos
-                lead.NombreCompleto = updateLeadDto.NombreCompleto;
-                lead.Email = updateLeadDto.Email;
-                lead.Telefono = updateLeadDto.Telefono;
-                lead.Mensaje = updateLeadDto.Mensaje;
-                lead.IdPropiedad = updateLeadDto.IdPropiedad;
-                lead.IdFuente = updateLeadDto.IdFuente;
-                lead.IdUsuarioAsignado = updateLeadDto.IdUsuarioAsignado;
+                // Actualizar campos si vienen en el DTO
+                if (updateDto.IdPropiedad.HasValue)
+                    existingLead.IdPropiedad = updateDto.IdPropiedad.Value == 0 ? null : updateDto.IdPropiedad.Value;
+
+                if (!string.IsNullOrWhiteSpace(updateDto.NombreCompleto))
+                    existingLead.NombreCompleto = updateDto.NombreCompleto.Trim();
+
+                if (updateDto.Email != null)
+                    existingLead.Email = string.IsNullOrWhiteSpace(updateDto.Email) ? null : updateDto.Email.Trim();
+
+                if (updateDto.Telefono != null)
+                    existingLead.Telefono = string.IsNullOrWhiteSpace(updateDto.Telefono) ? null : updateDto.Telefono.Trim();
+
+                if (updateDto.Mensaje != null)
+                    existingLead.Mensaje = string.IsNullOrWhiteSpace(updateDto.Mensaje) ? null : updateDto.Mensaje.Trim();
+
+                if (updateDto.IdFuente.HasValue)
+                    existingLead.IdFuente = updateDto.IdFuente.Value;
+
+                if (updateDto.IdUsuarioAsignado.HasValue)
+                    existingLead.IdUsuarioAsignado = updateDto.IdUsuarioAsignado.Value == 0 ? null : updateDto.IdUsuarioAsignado.Value;
+
+                if (updateDto.IdEstado.HasValue)
+                    existingLead.IdEstado = updateDto.IdEstado.Value;
+
+                if (updateDto.IdEstadoAdmin.HasValue)
+                    existingLead.IdEstadoAdmin = updateDto.IdEstadoAdmin.Value;
+
+                // NO permitir cambio de inmobiliaria
+                existingLead.IdInmobiliaria = tenantId;
+                existingLead.ActualizadoEn = DateTime.UtcNow;
+
+                await _leadRepository.UpdateAsync(existingLead);
+
+                var updatedLead = await _leadRepository.GetByIdAndTenantAsync(existingLead.Id, tenantId);
+                var responseDto = MapToResponseDto(updatedLead ?? existingLead);
+
+                return new BaseResponseDto<LeadDto>
+                {
+                    Success = true,
+                    Data = responseDto,
+                    Message = "Lead actualizado correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar lead: {Id} en tenant: {TenantId}", updateDto.Id, tenantId);
+                return new BaseResponseDto<LeadDto>
+                {
+                    Success = false,
+                    Message = "No se pudo actualizar el lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<object>> CambiarEstadoAsync(CambiarEstadoLeadDto cambioDto, int tenantId, int usuarioId)
+        {
+            try
+            {
+                var lead = await _leadRepository.GetByIdAndTenantAsync(cambioDto.IdEstadoNuevo, tenantId);
+                if (lead == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Lead no encontrado en su organización."
+                    };
+                }
+
+                var estadoAnterior = lead.IdEstado;
+
+                if (estadoAnterior == cambioDto.IdEstadoNuevo)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "El lead ya se encuentra en ese estado."
+                    };
+                }
+
+                lead.IdEstado = cambioDto.IdEstadoNuevo;
                 lead.ActualizadoEn = DateTime.UtcNow;
 
+                await _leadRepository.UpdateAsync(lead);
+
+                // Crear historial de cambio de estado
+                var historial = new LeadEstadoHistorial
+                {
+                    IdLead = lead.Id,
+                    IdEstadoAnterior = estadoAnterior,
+                    IdEstadoNuevo = cambioDto.IdEstadoNuevo,
+                    IdUsuario = usuarioId,
+                    Comentario = cambioDto.Comentario ?? "Cambio de estado",
+                    CreadoEn = DateTime.UtcNow
+                };
+
+                _context.LeadEstadoHistorial.Add(historial);
                 await _context.SaveChangesAsync();
 
-                var leadActualizado = await _leadRepository.GetByIdAsync(leadId);
-                var responseDto = MapToResponseDto(leadActualizado!);
-
-                return new BaseResponseDto<LeadResponseDto>
+                return new BaseResponseDto<object>
                 {
                     Success = true,
-                    Data = responseDto,
-                    Message = "Lead actualizado exitosamente"
+                    Message = "Estado del lead cambiado correctamente."
                 };
             }
             catch (Exception ex)
             {
-                return new BaseResponseDto<LeadResponseDto>
+                _logger.LogError(ex, "Error al cambiar estado del lead: {IdLead} en tenant: {TenantId}", cambioDto.IdLead, tenantId);
+                return new BaseResponseDto<object>
                 {
                     Success = false,
-                    Message = "Error al actualizar el lead",
-                    Errors = new List<string> { ex.Message }
+                    Message = "Error al cambiar estado del lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
                 };
             }
         }
 
-        public async Task<BaseResponseDto<LeadResponseDto>> GetByIdAsync(int id)
+        public async Task<BaseResponseDto<object>> AsignarUsuarioAsync(AsignarLeadDto asignacionDto, int tenantId, int usuarioAsignadorId)
         {
             try
             {
-                var lead = await _leadRepository.GetByIdAsync(id);
+                var lead = await _leadRepository.GetByIdAndTenantAsync(asignacionDto.IdLead, tenantId);
                 if (lead == null)
                 {
-                    return new BaseResponseDto<LeadResponseDto>
+                    return new BaseResponseDto<object>
                     {
                         Success = false,
-                        Message = "Lead no encontrado",
-                        Errors = new List<string> { $"No existe lead con ID {id}" }
+                        Message = "Lead no encontrado en su organización."
                     };
                 }
 
-                var responseDto = MapToResponseDto(lead);
+                // Validar usuario asignado
+                var usuarioValido = await _leadRepository.ValidateUsuarioInTenantAsync(asignacionDto.IdUsuarioAsignado, tenantId);
+                if (!usuarioValido)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "El usuario asignado no pertenece a su organización o no está activo."
+                    };
+                }
 
-                return new BaseResponseDto<LeadResponseDto>
+                lead.IdUsuarioAsignado = asignacionDto.IdUsuarioAsignado;
+                lead.ActualizadoEn = DateTime.UtcNow;
+
+                await _leadRepository.UpdateAsync(lead);
+
+                // Crear historial de asignación
+                var historial = new LeadEstadoHistorial
+                {
+                    IdLead = lead.Id,
+                    IdEstadoAnterior = lead.IdEstado,
+                    IdEstadoNuevo = lead.IdEstado,
+                    IdUsuario = usuarioAsignadorId,
+                    Comentario = $"Lead asignado a usuario. {asignacionDto.Comentario}",
+                    CreadoEn = DateTime.UtcNow
+                };
+
+                _context.LeadEstadoHistorial.Add(historial);
+                await _context.SaveChangesAsync();
+
+                return new BaseResponseDto<object>
                 {
                     Success = true,
-                    Data = responseDto,
-                    Message = "Lead obtenido exitosamente"
+                    Message = "Lead asignado correctamente."
                 };
             }
             catch (Exception ex)
             {
-                return new BaseResponseDto<LeadResponseDto>
+                _logger.LogError(ex, "Error al asignar lead: {IdLead} en tenant: {TenantId}", asignacionDto.IdLead, tenantId);
+                return new BaseResponseDto<object>
                 {
                     Success = false,
-                    Message = "Error al obtener el lead",
-                    Errors = new List<string> { ex.Message }
+                    Message = "Error al asignar lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
                 };
             }
         }
 
-        public async Task<BaseResponseDto<LeadResponseDto>> EliminarLeadAsync(int leadId, int usuarioId)
+        public async Task<BaseResponseDto<object>> DeleteAsync(int id, int tenantId)
         {
             try
             {
-                var lead = await _leadRepository.GetByIdAsync(leadId);
+                var lead = await _leadRepository.GetByIdAndTenantAsync(id, tenantId);
                 if (lead == null)
                 {
-                    return new BaseResponseDto<LeadResponseDto>
+                    return new BaseResponseDto<object>
                     {
                         Success = false,
-                        Message = "Lead no encontrado",
-                        Errors = new List<string> { $"No existe lead con ID {leadId}" }
+                        Message = "Lead no encontrado en su organización."
                     };
                 }
 
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
+                // Eliminación lógica: cambiar estado administrativo
+                if (lead.IdEstadoAdmin == 3) // Ya eliminado
                 {
-                    // Actualizar estado admin a eliminado (3)
-                    lead.IdEstadoAdmin = 3; // eliminado
-                    lead.ActualizadoEn = DateTime.UtcNow;
-
-                    // Crear historial de cambio de estado admin
-                    var historial = new LeadEstadoHistorial
+                    return new BaseResponseDto<object>
                     {
-                        IdLead = leadId,
-                        IdEstadoAnterior = lead.IdEstado,
-                        IdEstadoNuevo = lead.IdEstado, // Mantener el mismo estado de lead
-                        IdUsuario = usuarioId,
-                        Comentario = "Lead marcado como eliminado por el usuario",
-                        CreadoEn = DateTime.UtcNow
-                    };
-
-                    _context.LeadEstadoHistorial.Add(historial);
-                    await _context.SaveChangesAsync();
-
-                    await transaction.CommitAsync();
-
-                    var responseDto = MapToResponseDto(lead);
-
-                    return new BaseResponseDto<LeadResponseDto>
-                    {
-                        Success = true,
-                        Data = responseDto,
-                        Message = "Lead eliminado exitosamente"
+                        Success = false,
+                        Message = "El lead ya se encuentra eliminado."
                     };
                 }
-                catch (Exception)
+
+                lead.IdEstadoAdmin = 3; // Estado eliminado
+                lead.ActualizadoEn = DateTime.UtcNow;
+
+                await _leadRepository.UpdateAsync(lead);
+
+                return new BaseResponseDto<object>
                 {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                    Success = true,
+                    Message = "Lead eliminado correctamente."
+                };
             }
             catch (Exception ex)
             {
-                return new BaseResponseDto<LeadResponseDto>
+                _logger.LogError(ex, "Error al eliminar lead: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
                 {
                     Success = false,
-                    Message = "Error al eliminar el lead",
-                    Errors = new List<string> { ex.Message }
+                    Message = "Error al eliminar lead.",
+                    Errors = new List<string> { "Error interno del servidor." }
                 };
             }
-        }
-
-        private static LeadResponseDto MapToResponseDto(Lead lead)
-        {
-            return new LeadResponseDto
-            {
-                Id = lead.Id,
-                NombreCompleto = lead.NombreCompleto,
-                Email = lead.Email,
-                Telefono = lead.Telefono,
-                Mensaje = lead.Mensaje,
-                IdPropiedad = lead.IdPropiedad,
-                PropiedadTitulo = lead.Propiedad?.Titulo,
-                PropiedadDireccion = lead.Propiedad?.Direccion,
-                IdEstado = lead.IdEstado,
-                EstadoNombre = lead.Estado?.Nombre ?? "Desconocido",
-                IdFuente = lead.IdFuente,
-                FuenteNombre = lead.Fuente?.Nombre ?? "Desconocido",
-                IdUsuarioAsignado = lead.IdUsuarioAsignado,
-                UsuarioAsignadoNombre = lead.UsuarioAsignado != null
-                    ? $"{lead.UsuarioAsignado.Nombre}".Trim()
-                    : null,
-                UsuarioAsignadoEmail = lead.UsuarioAsignado?.Email,
-                IdEstadoAdmin = lead.IdEstadoAdmin,
-                EstadoAdminDescripcion = lead.EstadoAdmin?.Descripcion ?? "Activo",
-                CreadoEn = lead.CreadoEn,
-                ActualizadoEn = lead.ActualizadoEn
-            };
         }
     }
 }

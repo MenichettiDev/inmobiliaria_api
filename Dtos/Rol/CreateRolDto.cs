@@ -4,8 +4,8 @@ namespace inmobiliariaApi.DTOs.Rol
 {
     public class CreateRolDto
     {
-        [Required(ErrorMessage = "El nombre del rol es requerido")]
-        [StringLength(50, ErrorMessage = "El nombre no puede exceder 50 caracteres")]
+        [Required(ErrorMessage = "El nombre del rol es obligatorio")]
+        [MaxLength(30, ErrorMessage = "El nombre no puede exceder los 30 caracteres")]
         public string Nombre { get; set; } = string.Empty;
     }
 }
