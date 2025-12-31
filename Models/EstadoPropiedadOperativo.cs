@@ -30,3 +30,8 @@ namespace inmobiliariaApi.Models
         public virtual ICollection<Propiedad> Propiedades { get; set; } = new List<Propiedad>();
     }
 }
+
+// 1	disponible	Disponible	Propiedad disponible para alquiler o venta	1	#4CAF50
+// 2	alquilada	Alquilada	Propiedad actualmente alquilada	1	#2196F3
+// 3	vendida	Vendida	Propiedad ya vendida	1	#9E9E9E
+// 4	reservada	Reservada	Propiedad con reserva pendiente	1	#FF9800
