@@ -221,5 +221,28 @@ namespace inmobiliariaApi.Controllers
                 return Ok(response);
             return BadRequest(response);
         }
+
+        // Nuevo endpoint: reactivar propiedad (solo Administrador)
+        [HttpPost("{id}/reactivar")]
+        [Authorize(Roles = "Administrador")]
+        public async Task<IActionResult> Reactivate(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _propiedadService.ReactivateAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
     }
 }

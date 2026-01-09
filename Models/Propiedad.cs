@@ -31,10 +31,10 @@ namespace inmobiliariaApi.Models
         [MaxLength(200)]
         public string Direccion { get; set; } = string.Empty;
 
-        [Column(TypeName = "decimal(10,6)")]
+        [Column(TypeName = "decimal(10,8)")]
         public decimal? Latitud { get; set; }
 
-        [Column(TypeName = "decimal(10,6)")]
+        [Column(TypeName = "decimal(10,8)")]
         public decimal? Longitud { get; set; }
 
         [Column("publicada_en")]

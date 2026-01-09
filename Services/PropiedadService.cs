@@ -298,7 +298,7 @@ namespace inmobiliariaApi.Services
                 }
 
                 // Verificar que la propiedad no esté ya inactiva
-                if (propiedad.IdEstadoAdmin == 2)
+                if (propiedad.IdEstadoAdmin == 0)
                 {
                     return new BaseResponseDto<object>
                     {
@@ -307,8 +307,8 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // ELIMINACIÓN LÓGICA ÚNICAMENTE - cambiar estado administrativo a inactivo (2)
-                propiedad.IdEstadoAdmin = 2; // Estado inactivo
+                // ELIMINACIÓN LÓGICA ÚNICAMENTE - cambiar estado administrativo a inactivo (0)
+                propiedad.IdEstadoAdmin = 0; // Estado inactivo
                 propiedad.ActualizadoEn = DateTime.UtcNow;
 
                 // NO usar el método DeleteAsync del repositorio base, solo UpdateAsync
@@ -329,6 +329,56 @@ namespace inmobiliariaApi.Services
                 {
                     Success = false,
                     Message = "Error al desactivar propiedad.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        // Nuevo método: reactivar propiedad (forzar estado administrativo activo = 1)
+        public async Task<BaseResponseDto<object>> ReactivateAsync(int id, int tenantId)
+        {
+            try
+            {
+                var propiedad = await _propiedadRepository.GetByIdWithDetailsAndTenantAsync(id, tenantId);
+                if (propiedad == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Propiedad no encontrada en su organización."
+                    };
+                }
+
+                // Si ya está activa, retornar mensaje adecuado
+                if (propiedad.IdEstadoAdmin == 1)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = true,
+                        Message = "La propiedad ya se encuentra activa."
+                    };
+                }
+
+                propiedad.IdEstadoAdmin = 1; // Activar
+                propiedad.ActualizadoEn = DateTime.UtcNow;
+
+                await _propiedadRepository.UpdateAsync(propiedad);
+
+                _logger.LogInformation("Propiedad ID: {Id} reactivada en tenant: {TenantId}", id, tenantId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Propiedad reactivada correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al reactivar propiedad: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al reactivar la propiedad.",
                     Errors = new List<string> { "Error interno del servidor." }
                 };
             }
