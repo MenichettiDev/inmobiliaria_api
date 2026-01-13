@@ -43,21 +43,20 @@ namespace inmobiliariaApi.Services
                 Mensaje = lead.Mensaje,
                 IdFuente = lead.IdFuente,
                 IdEstado = lead.IdEstado,
-                IdEstadoAdmin = lead.IdEstadoAdmin,
+                Activo = lead.Activo,
                 CreadoEn = lead.CreadoEn,
                 ActualizadoEn = lead.ActualizadoEn,
                 PropiedadTitulo = lead.Propiedad?.Titulo,
                 InmobiliariaNombre = lead.Inmobiliaria?.Nombre,
                 UsuarioAsignadoNombre = lead.UsuarioAsignado?.Nombre,
                 FuenteNombre = lead.Fuente?.Nombre,
-                EstadoNombre = lead.Estado?.Nombre,
-                EstadoAdminDescripcion = lead.EstadoAdmin?.Descripcion
+                EstadoNombre = lead.Estado?.Nombre
             };
         }
 
         public async Task<BaseResponseDto<PaginatedResponseDto<LeadDto>>> GetLeadsPaginatedAsync(
             int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
-            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? estadoAdminId = null)
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, bool? activo = null)
         {
             try
             {
@@ -65,7 +64,7 @@ namespace inmobiliariaApi.Services
                 if (pageSize <= 0) pageSize = 10;
 
                 var (leads, totalRecords) = await _leadRepository.GetPagedByTenantAsync(
-                    page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, estadoAdminId);
+                    page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, activo);
 
                 var leadsDto = leads.Select(MapToResponseDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
@@ -191,7 +190,7 @@ namespace inmobiliariaApi.Services
                     Mensaje = createDto.Mensaje?.Trim(),
                     IdFuente = createDto.IdFuente,
                     IdEstado = createDto.IdEstado,
-                    IdEstadoAdmin = 1, // Por defecto activo
+                    Activo = true, // Por defecto activo
                     CreadoEn = DateTime.UtcNow,
                     ActualizadoEn = DateTime.UtcNow
                 };
@@ -309,8 +308,8 @@ namespace inmobiliariaApi.Services
                 if (updateDto.IdEstado.HasValue)
                     existingLead.IdEstado = updateDto.IdEstado.Value;
 
-                if (updateDto.IdEstadoAdmin.HasValue)
-                    existingLead.IdEstadoAdmin = updateDto.IdEstadoAdmin.Value;
+                if (updateDto.Activo.HasValue)
+                    existingLead.Activo = updateDto.Activo.Value;
 
                 // NO permitir cambio de inmobiliaria
                 existingLead.IdInmobiliaria = tenantId;
@@ -344,7 +343,7 @@ namespace inmobiliariaApi.Services
         {
             try
             {
-                var lead = await _leadRepository.GetByIdAndTenantAsync(cambioDto.IdEstadoNuevo, tenantId);
+                var lead = await _leadRepository.GetByIdAndTenantAsync(cambioDto.IdLead, tenantId);
                 if (lead == null)
                 {
                     return new BaseResponseDto<object>
@@ -479,7 +478,7 @@ namespace inmobiliariaApi.Services
                 }
 
                 // Eliminación lógica: cambiar estado administrativo
-                if (lead.IdEstadoAdmin == 3) // Ya eliminado
+                if (!lead.Activo) // Ya eliminado
                 {
                     return new BaseResponseDto<object>
                     {
@@ -488,7 +487,7 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                lead.IdEstadoAdmin = 3; // Estado eliminado
+                lead.Activo = false; // Estado eliminado
                 lead.ActualizadoEn = DateTime.UtcNow;
 
                 await _leadRepository.UpdateAsync(lead);

@@ -25,12 +25,11 @@ namespace inmobiliariaApi.Controllers
         {
             var estados = await _estadoRepository.GetAllAsync();
 
-            // Mapear a DTO limpio
             var result = estados.Select(e => new EstadoLeadDto
             {
                 Id = e.Id,
                 Nombre = e.Nombre,
-                Activo = e.Activo
+                Activo = true // Default to true since column doesn't exist
             });
 
             return Ok(new { Success = true, Data = result, Message = "Estados de lead obtenidos correctamente" });
@@ -41,13 +40,14 @@ namespace inmobiliariaApi.Controllers
         [Authorize(Roles = "Programador,Administrador,Supervisor,Agente")] // Todos pueden consultar estados activos
         public async Task<IActionResult> GetEstadosActivos()
         {
-            var estados = await _estadoRepository.FindAsync(e => e.Activo == true);
+            // Since Activo column doesn't exist, return all estados
+            var estados = await _estadoRepository.GetAllAsync();
 
             var result = estados.Select(e => new EstadoLeadDto
             {
                 Id = e.Id,
                 Nombre = e.Nombre,
-                Activo = e.Activo
+                Activo = true
             });
 
             return Ok(new { Success = true, Data = result, Message = "Estados de lead activos obtenidos correctamente" });
@@ -71,7 +71,7 @@ namespace inmobiliariaApi.Controllers
             {
                 Id = estado.Id,
                 Nombre = estado.Nombre,
-                Activo = estado.Activo
+                Activo = true // Default since column doesn't exist
             };
 
             return Ok(new { Success = true, Data = result, Message = "Estado de lead encontrado" });
@@ -98,8 +98,8 @@ namespace inmobiliariaApi.Controllers
             // Crear un objeto EstadoLead a partir del DTO
             var estado = new EstadoLead
             {
-                Nombre = estadoDto.Nombre.Trim(),
-                Activo = estadoDto.Activo
+                Nombre = estadoDto.Nombre.Trim()
+                // Remove Activo since it doesn't exist in database
             };
 
             var result = await _estadoRepository.AddAsync(estado);
@@ -108,7 +108,7 @@ namespace inmobiliariaApi.Controllers
             {
                 Id = result.Id,
                 Nombre = result.Nombre,
-                Activo = result.Activo
+                Activo = true
             };
 
             return CreatedAtAction(nameof(GetEstado), new { id = result.Id },
@@ -146,12 +146,6 @@ namespace inmobiliariaApi.Controllers
                 {
                     return BadRequest(new { Success = false, Message = "No se puede cambiar el nombre de los estados básicos del sistema." });
                 }
-
-                // No permitir desactivar el estado "nuevo" (1) que es fundamental
-                if (id == 1 && !estadoDto.Activo)
-                {
-                    return BadRequest(new { Success = false, Message = "No se puede desactivar el estado 'nuevo'." });
-                }
             }
 
             // Validar que el nombre no exista en otro registro
@@ -162,9 +156,8 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "Ya existe otro estado con ese nombre." });
             }
 
-            // Actualizar campos
+            // Only update the name
             existingEstado.Nombre = estadoDto.Nombre.Trim();
-            existingEstado.Activo = estadoDto.Activo;
 
             await _estadoRepository.UpdateAsync(existingEstado);
 
@@ -172,7 +165,7 @@ namespace inmobiliariaApi.Controllers
             {
                 Id = existingEstado.Id,
                 Nombre = existingEstado.Nombre,
-                Activo = existingEstado.Activo
+                Activo = true
             };
 
             return Ok(new { Success = true, Data = responseDto, Message = "Estado de lead actualizado correctamente" });
@@ -195,7 +188,7 @@ namespace inmobiliariaApi.Controllers
             // Verificar que no sea uno de los estados fundamentales (1-5)
             if (id <= 5)
             {
-                return BadRequest(new { Success = false, Message = "No se pueden eliminar los estados básicos del sistema (nuevo, contactado, visitó, cerrado, perdido)." });
+                return BadRequest(new { Success = false, Message = "No se pueden eliminar los estados básicos del sistema." });
             }
 
             // Verificar que no haya leads usando este estado
@@ -203,42 +196,11 @@ namespace inmobiliariaApi.Controllers
             var estadoCompleto = estadoConLeads.FirstOrDefault();
             if (estadoCompleto != null && estadoCompleto.Leads.Any())
             {
-                // En lugar de eliminar físicamente, desactivar
-                estadoCompleto.Activo = false;
-                await _estadoRepository.UpdateAsync(estadoCompleto);
-                return Ok(new { Success = true, Message = "Estado desactivado correctamente (hay leads que lo usan)." });
+                return BadRequest(new { Success = false, Message = "No se puede eliminar el estado porque hay leads que lo usan." });
             }
 
-            // Si no hay leads usando este estado, eliminar físicamente
             await _estadoRepository.DeleteAsync(id);
             return Ok(new { Success = true, Message = "Estado de lead eliminado correctamente" });
-        }
-
-        // PATCH: api/estadolead/{id}/toggle (Activar/Desactivar estado)
-        [HttpPatch("{id}/toggle")]
-        [Authorize(Roles = "Programador")]
-        public async Task<IActionResult> ToggleEstado(int id)
-        {
-            if (id <= 0)
-            {
-                return BadRequest(new { Success = false, Message = "ID no válido." });
-            }
-
-            // No permitir desactivar el estado "nuevo" (1)
-            if (id == 1)
-            {
-                return BadRequest(new { Success = false, Message = "No se puede desactivar el estado 'nuevo'." });
-            }
-
-            var estado = await _estadoRepository.GetByIdAsync(id);
-            if (estado == null)
-                return NotFound(new { Success = false, Message = "Estado de lead no encontrado" });
-
-            estado.Activo = !estado.Activo;
-            await _estadoRepository.UpdateAsync(estado);
-
-            string accion = estado.Activo ? "activado" : "desactivado";
-            return Ok(new { Success = true, Message = $"Estado de lead {accion} correctamente." });
         }
     }
 }

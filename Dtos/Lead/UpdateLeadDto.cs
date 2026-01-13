@@ -25,7 +25,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public int? IdFuente { get; set; }
         public int? IdUsuarioAsignado { get; set; }
         public int? IdEstado { get; set; }
-        public int? IdEstadoAdmin { get; set; }
+        public bool? Activo { get; set; }
 
         // El IdInmobiliaria no se puede cambiar
         public int? IdInmobiliaria { get; set; }

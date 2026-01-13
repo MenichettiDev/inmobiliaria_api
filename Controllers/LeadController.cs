@@ -40,7 +40,7 @@ namespace inmobiliariaApi.Controllers
             [FromQuery] int? fuenteId = null,
             [FromQuery] int? usuarioAsignadoId = null,
             [FromQuery] int? propiedadId = null,
-            [FromQuery] int? estadoAdminId = null)
+            [FromQuery] bool? activo = null)
         {
             var tenantId = GetTenantId();
 
@@ -50,7 +50,7 @@ namespace inmobiliariaApi.Controllers
             }
 
             var response = await _leadService.GetLeadsPaginatedAsync(
-                page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, estadoAdminId);
+                page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, activo);
 
             if (response.Success)
                 return Ok(response);

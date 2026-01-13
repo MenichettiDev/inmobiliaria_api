@@ -26,7 +26,7 @@ namespace inmobiliariaApi.Repositories
         {
             var tenantId = _tenantContext.GetCurrentTenantId();
             return await _dbSet
-                .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin != 3) // No eliminados
+                .Where(l => l.IdInmobiliaria == tenantId)
                 .Include(l => l.Propiedad)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
@@ -38,12 +38,11 @@ namespace inmobiliariaApi.Repositories
         {
             var tenantId = _tenantContext.GetCurrentTenantId();
             return await _dbSet
-                .Where(l => l.IdInmobiliaria == tenantId && l.Id == id && l.IdEstadoAdmin != 3)
+                .Where(l => l.IdInmobiliaria == tenantId && l.Id == id)
                 .Include(l => l.Propiedad)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
-                .Include(l => l.EstadoAdmin)
                 .FirstOrDefaultAsync();
         }
 
@@ -70,15 +69,20 @@ namespace inmobiliariaApi.Repositories
             var tenantId = _tenantContext.GetCurrentTenantId();
 
             var query = _dbSet
-                .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin != 3)
+                .Where(l => l.IdInmobiliaria == tenantId)
                 .Include(l => l.Propiedad)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
-                .Include(l => l.EstadoAdmin)
                 .AsQueryable();
 
-            // Aplicar filtros
+            // Apply Activo filter if specified
+            if (filtros.Activo.HasValue)
+            {
+                query = query.Where(l => l.Activo == filtros.Activo.Value);
+            }
+
+            // Apply other filters
             if (!string.IsNullOrWhiteSpace(filtros.NombreCompleto))
             {
                 query = query.Where(l => l.NombreCompleto.Contains(filtros.NombreCompleto));
@@ -124,10 +128,9 @@ namespace inmobiliariaApi.Repositories
                 query = query.Where(l => l.CreadoEn <= filtros.FechaHasta.Value.AddDays(1));
             }
 
-            // Contar total antes de paginación
             var totalCount = await query.CountAsync();
 
-            // Aplicar ordenamiento
+            // Apply ordering - avoid referencing Estado.Nombre to prevent SQL errors
             if (!string.IsNullOrWhiteSpace(filtros.OrderBy))
             {
                 switch (filtros.OrderBy.ToLower())
@@ -145,19 +148,23 @@ namespace inmobiliariaApi.Repositories
                             : query.OrderBy(l => l.NombreCompleto);
                         break;
                     case "estado":
+                        // Use IdEstado instead of Estado.Nombre to avoid SQL errors
                         query = filtros.OrderDescending
-                            ? query.OrderByDescending(l => l.Estado!.Nombre)
-                            : query.OrderBy(l => l.Estado!.Nombre);
+                            ? query.OrderByDescending(l => l.IdEstado)
+                            : query.OrderBy(l => l.IdEstado);
                         break;
-                    default: // creado_en por defecto
+                    default:
                         query = filtros.OrderDescending
                             ? query.OrderByDescending(l => l.CreadoEn)
                             : query.OrderBy(l => l.CreadoEn);
                         break;
                 }
             }
+            else
+            {
+                query = query.OrderByDescending(l => l.CreadoEn);
+            }
 
-            // Aplicar paginación
             var items = await query
                 .Skip((filtros.Page - 1) * filtros.PageSize)
                 .Take(filtros.PageSize)
@@ -175,8 +182,7 @@ namespace inmobiliariaApi.Repositories
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId &&
                            l.CreadoEn >= startDate &&
-                           l.CreadoEn < endDate &&
-                           l.IdEstadoAdmin != 3)
+                           l.CreadoEn < endDate)
                 .CountAsync();
         }
 
@@ -205,7 +211,7 @@ namespace inmobiliariaApi.Repositories
         {
             // Asegurar que el lead pertenece al tenant actual
             entity.IdInmobiliaria = _tenantContext.GetCurrentTenantId();
-            entity.IdEstadoAdmin = 1; // Activo por defecto
+            entity.Activo = true; // Activo por defecto
             entity.IdEstado = entity.IdEstado == 0 ? 1 : entity.IdEstado; // Nuevo por defecto
 
             return await base.AddAsync(entity);
@@ -239,7 +245,6 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.UsuarioAsignado)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
-                .Include(l => l.EstadoAdmin)
                 .Where(l => l.IdInmobiliaria == tenantId)
                 .OrderByDescending(l => l.CreadoEn)
                 .ToListAsync();
@@ -253,13 +258,12 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.UsuarioAsignado)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
-                .Include(l => l.EstadoAdmin)
                 .FirstOrDefaultAsync(l => l.Id == id && l.IdInmobiliaria == tenantId);
         }
 
         public async Task<(IEnumerable<Lead> Data, int TotalRecords)> GetPagedByTenantAsync(
             int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
-            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? estadoAdminId = null)
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, bool? activo = true)
         {
             var query = _dbSet
                 .Include(l => l.Propiedad)
@@ -267,7 +271,6 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.UsuarioAsignado)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
-                .Include(l => l.EstadoAdmin)
                 .Where(l => l.IdInmobiliaria == tenantId);
 
             if (!string.IsNullOrEmpty(nombre))
@@ -299,9 +302,9 @@ namespace inmobiliariaApi.Repositories
                 query = query.Where(l => l.IdPropiedad == propiedadId.Value);
             }
 
-            if (estadoAdminId.HasValue)
+            if (activo.HasValue)
             {
-                query = query.Where(l => l.IdEstadoAdmin == estadoAdminId.Value);
+                query = query.Where(l => l.Activo == activo);
             }
 
             var totalRecords = await query.CountAsync();
@@ -346,7 +349,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.UsuarioAsignado)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
-                .Where(l => l.IdInmobiliaria == tenantId && l.IdEstadoAdmin == 1)
+                .Where(l => l.IdInmobiliaria == tenantId && l.Activo == true)
                 .OrderByDescending(l => l.CreadoEn)
                 .ToListAsync();
         }

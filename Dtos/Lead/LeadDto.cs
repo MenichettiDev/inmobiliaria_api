@@ -12,7 +12,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public string? Mensaje { get; set; }
         public int IdFuente { get; set; }
         public int IdEstado { get; set; }
-        public int IdEstadoAdmin { get; set; }
+        public bool Activo { get; set; }
         public DateTime CreadoEn { get; set; }
         public DateTime ActualizadoEn { get; set; }
 

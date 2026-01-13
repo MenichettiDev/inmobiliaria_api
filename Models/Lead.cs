@@ -41,8 +41,8 @@ namespace inmobiliariaApi.Models
         [Column("id_estado")]
         public int IdEstado { get; set; } = 1;
 
-        [Column("id_estado_admin")]
-        public int IdEstadoAdmin { get; set; } = 1;
+        [Column("activo")]
+        public bool Activo { get; set; } = true;
 
         [Column("creado_en")]
         public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
@@ -65,9 +65,6 @@ namespace inmobiliariaApi.Models
 
         [ForeignKey("IdEstado")]
         public virtual EstadoLead? Estado { get; set; }
-
-        [ForeignKey("IdEstadoAdmin")]
-        public virtual EstadoLeadAdmin? EstadoAdmin { get; set; }
 
         public virtual ICollection<LeadEstadoHistorial> HistorialEstados { get; set; } = new List<LeadEstadoHistorial>();
     }

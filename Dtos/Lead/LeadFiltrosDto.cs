@@ -16,6 +16,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public string? TipoOperacion { get; set; }
         public decimal? PresupuestoMinimo { get; set; }
         public decimal? PresupuestoMaximo { get; set; }
+        public bool? Activo { get; set; } = true; // Filtrar solo activos por defecto
 
         // Parámetros de paginación
         public int Page { get; set; } = 1;

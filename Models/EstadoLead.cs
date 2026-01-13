@@ -13,8 +13,6 @@ namespace inmobiliariaApi.Models
         [MaxLength(30)]
         public string Nombre { get; set; } = string.Empty;
 
-        public bool Activo { get; set; } = true;
-
         // Navigation properties
         public virtual ICollection<Lead> Leads { get; set; } = new List<Lead>();
         public virtual ICollection<LeadEstadoHistorial> HistorialEstadosAnteriores { get; set; } = new List<LeadEstadoHistorial>();

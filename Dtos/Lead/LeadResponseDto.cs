@@ -27,7 +27,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public string? UsuarioAsignadoEmail { get; set; }
 
         // Estado administrativo
-        public int IdEstadoAdmin { get; set; }
+        public bool Activo { get; set; }
         public string EstadoAdminDescripcion { get; set; } = string.Empty;
 
         // Auditoría
