@@ -36,7 +36,7 @@ namespace inmobiliariaApi.Controllers
 
         // GET: api/inmobiliaria/{id} (Solo para Programadores)
         [HttpGet("{id}")]
-        [Authorize(Roles = "Programador")]
+        [Authorize(Roles = "Programador, Administrador")]
         public async Task<IActionResult> GetById(int id)
         {
             if (id <= 0)

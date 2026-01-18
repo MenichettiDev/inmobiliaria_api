@@ -84,6 +84,7 @@ namespace inmobiliariaApi.Controllers
                     usuario = new
                     {
                         usuario.Id,
+                        usuario.IdInmobiliaria,
                         usuario.Nombre,
                         usuario.Email,
                         usuario.IdRol,
