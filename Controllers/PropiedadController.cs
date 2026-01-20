@@ -244,5 +244,22 @@ namespace inmobiliariaApi.Controllers
                 return Ok(response);
             return BadRequest(response);
         }
+
+        [HttpGet("combo")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> GetPropiedadesCombo()
+        {
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _propiedadService.GetPropiedadesComboAsync(tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
     }
 }

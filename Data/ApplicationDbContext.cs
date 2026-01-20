@@ -26,6 +26,8 @@ namespace inmobiliariaApi.Data
         public DbSet<EstadoPropiedadOperativo> EstadoPropiedadOperativo { get; set; }
         public DbSet<EstadoPropiedadActividad> EstadoPropiedadActividad { get; set; }
         public DbSet<LeadEstadoHistorial> LeadEstadoHistorial { get; set; }
+        public DbSet<UsoMensual> UsoMensual { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones
         {

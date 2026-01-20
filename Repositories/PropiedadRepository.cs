@@ -87,5 +87,20 @@ namespace inmobiliariaApi.Repositories
             return await _context.Usuario
                 .AnyAsync(u => u.Id == agenteId && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
         }
+
+        public async Task<List<Propiedad>> GetPropiedadesComboAsync(int tenantId)
+        {
+            return await _dbSet
+                .Where(p => p.IdInmobiliaria == tenantId && p.IdEstadoAdmin == 1)
+                .OrderBy(p => p.Titulo)
+                .Select(p => new Propiedad
+                {
+                    Id = p.Id,
+                    Titulo = p.Titulo,
+                    Direccion = p.Direccion,
+                    Precio = p.Precio
+                })
+                .ToListAsync();
+        }
     }
 }

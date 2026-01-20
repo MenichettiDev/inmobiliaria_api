@@ -383,5 +383,38 @@ namespace inmobiliariaApi.Services
                 };
             }
         }
+
+        public async Task<BaseResponseDto<List<PropiedadComboDto>>> GetPropiedadesComboAsync(int tenantId)
+        {
+            try
+            {
+                var propiedades = await _propiedadRepository.GetPropiedadesComboAsync(tenantId);
+
+                var dto = propiedades.Select(p => new PropiedadComboDto
+                {
+                    Id = p.Id,
+                    Titulo = p.Titulo,
+                    Direccion = p.Direccion,
+                    Precio = p.Precio
+                }).ToList();
+
+                return new BaseResponseDto<List<PropiedadComboDto>>
+                {
+                    Success = true,
+                    Data = dto,
+                    Message = "Propiedades para combo obtenidas correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener propiedades para combo del tenant {TenantId}", tenantId);
+                return new BaseResponseDto<List<PropiedadComboDto>>
+                {
+                    Success = false,
+                    Message = "No se pudieron cargar las propiedades para el combo.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
     }
 }
