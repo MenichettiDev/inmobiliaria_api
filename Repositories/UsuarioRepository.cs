@@ -214,6 +214,15 @@ namespace inmobiliariaApi.Repositories
                 .ToListAsync();
         }
 
+        public async Task<IEnumerable<Usuario>> GetUsersForComboByTenantAsync(int tenantId)
+        {
+            return await _dbSet
+                .Include(u => u.Rol)
+                .Where(u => u.IdInmobiliaria == tenantId)
+                .OrderBy(u => u.Nombre)
+                .ToListAsync();
+        }
+
         // Método auxiliar para verificar contraseña usando KeyDerivation
         private bool VerifyPasswordWithKeyDerivation(string password, string hashedPassword)
         {

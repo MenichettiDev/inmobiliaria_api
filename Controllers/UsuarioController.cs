@@ -120,6 +120,23 @@ namespace inmobiliariaApi.Controllers
             return BadRequest(response);
         }
 
+        [HttpGet("combo")]
+        [Authorize(Roles = "Administrador,Supervisor,Operario")]
+        public async Task<IActionResult> GetUsersForCombo()
+        {
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _usuarioService.GetUsuariosForComboByTenantAsync(tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
+
         [HttpPost]
         [Authorize(Roles = "Administrador")]
         public async Task<IActionResult> Create([FromBody] CreateUsuarioDto createDto)

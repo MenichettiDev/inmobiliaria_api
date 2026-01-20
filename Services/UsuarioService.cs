@@ -73,6 +73,54 @@ namespace inmobiliariaApi.Services
             };
         }
 
+        // Método para mapear Usuario a UsuarioComboDto
+        private UsuarioComboDto MapToComboDto(Usuario usuario)
+        {
+            string estadoNombre = usuario.IdEstado switch
+            {
+                1 => "Activo",
+                2 => "Bloqueado",
+                3 => "Inactivo",
+                _ => "Desconocido"
+            };
+
+            return new UsuarioComboDto
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                IdRol = usuario.IdRol,
+                RolNombre = usuario.Rol?.Nombre ?? string.Empty,
+                IdEstado = usuario.IdEstado,
+                EstadoNombre = estadoNombre
+            };
+        }
+
+        public async Task<BaseResponseDto<IEnumerable<UsuarioComboDto>>> GetUsuariosForComboByTenantAsync(int tenantId)
+        {
+            try
+            {
+                var usuarios = await _usuarioRepository.GetUsersForComboByTenantAsync(tenantId);
+                var usuariosCombo = usuarios.Select(MapToComboDto).ToList();
+
+                return new BaseResponseDto<IEnumerable<UsuarioComboDto>>
+                {
+                    Success = true,
+                    Data = usuariosCombo,
+                    Message = "Personal obtenido correctamente para combo",
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener usuarios para combo del tenant: {TenantId}", tenantId);
+                return new BaseResponseDto<IEnumerable<UsuarioComboDto>>
+                {
+                    Success = false,
+                    Message = "Error al cargar el personal.",
+                    Errors = new List<string> { "Error interno del servidor." },
+                };
+            }
+        }
+
         public async Task<BaseResponseDto<IEnumerable<UsuarioResponseDto>>> GetAllUsuariosAsync()
         {
             try
