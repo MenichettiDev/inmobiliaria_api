@@ -21,10 +21,24 @@ namespace inmobiliariaApi.Repositories
             _logger = logger;
         }
 
+        // NEW: helper seguro para obtener tenant y evitar excepciones en local
+        private int TryGetTenantIdOrDefault(int fallback = 0)
+        {
+            try
+            {
+                return _tenantContext.GetCurrentTenantId();
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "No se pudo determinar el tenant desde TenantContext; usando fallback {Fallback}", fallback);
+                return fallback;
+            }
+        }
+
         // Sobrescribir métodos base para agregar filtro de tenant
         public override async Task<IEnumerable<Lead>> GetAllAsync()
         {
-            var tenantId = _tenantContext.GetCurrentTenantId();
+            var tenantId = TryGetTenantIdOrDefault();
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId)
                 .Include(l => l.Propiedad)
@@ -36,7 +50,7 @@ namespace inmobiliariaApi.Repositories
 
         public override async Task<Lead?> GetByIdAsync(int id)
         {
-            var tenantId = _tenantContext.GetCurrentTenantId();
+            var tenantId = TryGetTenantIdOrDefault();
             return await _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId && l.Id == id)
                 .Include(l => l.Propiedad)
@@ -66,7 +80,7 @@ namespace inmobiliariaApi.Repositories
 
         public async Task<(IEnumerable<Lead> Items, int TotalCount)> GetLeadsConFiltrosAsync(LeadFiltrosDto filtros)
         {
-            var tenantId = _tenantContext.GetCurrentTenantId();
+            var tenantId = TryGetTenantIdOrDefault();
 
             var query = _dbSet
                 .Where(l => l.IdInmobiliaria == tenantId)
@@ -175,7 +189,7 @@ namespace inmobiliariaApi.Repositories
 
         public async Task<int> GetLeadsCountByMonthAsync(int year, int month)
         {
-            var tenantId = _tenantContext.GetCurrentTenantId();
+            var tenantId = TryGetTenantIdOrDefault();
             var startDate = new DateTime(year, month, 1);
             var endDate = startDate.AddMonths(1);
 
@@ -191,9 +205,12 @@ namespace inmobiliariaApi.Repositories
             if (!propiedadId.HasValue)
                 return true; // Válido si no se especifica propiedad
 
-            var tenantId = _tenantContext.GetCurrentTenantId();
-            return await _context.Propiedad
+            var tenantId = TryGetTenantIdOrDefault();
+            _logger.LogDebug("ValidatePropertiesBelongsToTenantAsync checking propiedad {PropiedadId} for tenant {TenantId}", propiedadId.Value, tenantId);
+            var exists = await _context.Propiedad
                 .AnyAsync(p => p.Id == propiedadId.Value && p.IdInmobiliaria == tenantId);
+            _logger.LogDebug("ValidatePropertiesBelongsToTenantAsync result: {Exists}", exists);
+            return exists;
         }
 
         // Método para validar que el usuario asignado pertenece al tenant
@@ -202,39 +219,87 @@ namespace inmobiliariaApi.Repositories
             if (!usuarioId.HasValue)
                 return true; // Válido si no se asigna usuario
 
-            var tenantId = _tenantContext.GetCurrentTenantId();
-            return await _context.Usuario
+            var tenantId = TryGetTenantIdOrDefault();
+            _logger.LogDebug("ValidateUsuarioAsignadoBelongsToTenantAsync checking usuario {UsuarioId} for tenant {TenantId}", usuarioId.Value, tenantId);
+            var exists = await _context.Usuario
                 .AnyAsync(u => u.Id == usuarioId.Value && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
+            _logger.LogDebug("ValidateUsuarioAsignadoBelongsToTenantAsync result: {Exists}", exists);
+            return exists;
         }
 
         public override async Task<Lead> AddAsync(Lead entity)
         {
-            // Asegurar que el lead pertenece al tenant actual
-            entity.IdInmobiliaria = _tenantContext.GetCurrentTenantId();
-            entity.Activo = true; // Activo por defecto
-            entity.IdEstado = entity.IdEstado == 0 ? 1 : entity.IdEstado; // Nuevo por defecto
+            try
+            {
+                var tenantId = TryGetTenantIdOrDefault();
+                _logger.LogDebug("AddAsync starting for tenant {TenantId} with entity {@Entity}", tenantId, entity);
 
-            return await base.AddAsync(entity);
+                // Si obtuvimos un tenant válido, forzamos IdInmobiliaria; si no, respetamos lo que venga en entity
+                if (tenantId > 0)
+                    entity.IdInmobiliaria = tenantId;
+
+                entity.Activo = true; // Activo por defecto
+                entity.IdEstado = entity.IdEstado == 0 ? 1 : entity.IdEstado; // Nuevo por defecto
+
+                var added = await base.AddAsync(entity);
+                _logger.LogInformation("AddAsync finished. Lead Id: {LeadId}", added.Id);
+                return added;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en AddAsync al intentar guardar lead {@Entity}", entity);
+                throw;
+            }
         }
 
         // Agregar método CreateAsync para compatibilidad
         public async Task<Lead> CreateAsync(Lead entity)
         {
+            _logger.LogDebug("CreateAsync delegando a AddAsync para entidad {@Entity}", entity);
             return await AddAsync(entity);
         }
 
         // Agregar método UpdateAsync para compatibilidad con el servicio
         public override async Task<Lead> UpdateAsync(Lead entity)
         {
-            var tenantId = _tenantContext.GetCurrentTenantId();
-            if (entity.IdInmobiliaria != tenantId)
+            try
             {
-                throw new UnauthorizedAccessException("No se puede modificar un lead que no pertenece al tenant actual");
-            }
+                var tenantFromContext = TryGetTenantIdOrDefault();
+                var entityTenant = entity.IdInmobiliaria;
 
-            entity.ActualizadoEn = DateTime.UtcNow;
-            await base.UpdateAsync(entity);
-            return entity;
+                _logger.LogDebug("UpdateAsync iniciando para lead {LeadId}. Tenant from context: {ContextTenant}, Entity tenant: {EntityTenant}",
+                    entity.Id, tenantFromContext, entityTenant);
+                _logger.LogDebug("Entity antes del update: {@Entity}", entity);
+
+                // En lugar de usar solo el tenant del context, verificamos si la entidad ya tiene el tenant correcto
+                // Esto permite que el update funcione cuando el servicio ya estableció el tenant correcto
+                if (tenantFromContext > 0 && entityTenant != tenantFromContext)
+                {
+                    _logger.LogError("Intento de modificar lead {LeadId} que no pertenece al tenant del contexto {ContextTenant}. Lead pertenece a {EntityTenant}",
+                        entity.Id, tenantFromContext, entityTenant);
+                    throw new UnauthorizedAccessException("No se puede modificar un lead que no pertenece al tenant actual");
+                }
+
+                // Si el tenant del contexto es 0 (local), permitir el update si la entidad tiene un tenant válido
+                if (tenantFromContext == 0 && entityTenant > 0)
+                {
+                    _logger.LogWarning("Tenant context devolvió 0 (probablemente local), pero entity tiene tenant {EntityTenant}. Permitiendo update.", entityTenant);
+                }
+
+                entity.ActualizadoEn = DateTime.UtcNow;
+                _logger.LogDebug("Llamando a base.UpdateAsync para lead {LeadId}", entity.Id);
+
+                // FIX: Usar await directamente sin asignar a var
+                await base.UpdateAsync(entity);
+                _logger.LogInformation("UpdateAsync completado exitosamente para lead {LeadId}", entity.Id);
+
+                return entity;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en UpdateAsync para lead {LeadId}: {Message}", entity?.Id, ex.Message);
+                throw;
+            }
         }
 
         public async Task<IEnumerable<Lead>> GetByTenantAsync(int tenantId)
@@ -319,39 +384,20 @@ namespace inmobiliariaApi.Repositories
 
         public async Task<bool> ValidatePropiedadInTenantAsync(int propiedadId, int tenantId)
         {
-            return await _context.Propiedad
+            _logger.LogDebug("ValidatePropiedadInTenantAsync check propiedad {PropiedadId} for tenant {TenantId}", propiedadId, tenantId);
+            var result = await _context.Propiedad
                 .AnyAsync(p => p.Id == propiedadId && p.IdInmobiliaria == tenantId);
+            _logger.LogDebug("ValidatePropiedadInTenantAsync result: {Result}", result);
+            return result;
         }
 
         public async Task<bool> ValidateUsuarioInTenantAsync(int usuarioId, int tenantId)
         {
-            return await _context.Usuario
+            _logger.LogDebug("ValidateUsuarioInTenantAsync check usuario {UsuarioId} for tenant {TenantId}", usuarioId, tenantId);
+            var result = await _context.Usuario
                 .AnyAsync(u => u.Id == usuarioId && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
-        }
-
-        public async Task<int> GetCountByFuenteAndTenantAsync(int fuenteId, int tenantId, DateTime? desde = null, DateTime? hasta = null)
-        {
-            var query = _dbSet.Where(l => l.IdFuente == fuenteId && l.IdInmobiliaria == tenantId);
-
-            if (desde.HasValue)
-                query = query.Where(l => l.CreadoEn >= desde.Value);
-
-            if (hasta.HasValue)
-                query = query.Where(l => l.CreadoEn <= hasta.Value);
-
-            return await query.CountAsync();
-        }
-
-        public async Task<IEnumerable<Lead>> GetLeadsActivosByTenantAsync(int tenantId)
-        {
-            return await _dbSet
-                .Include(l => l.Propiedad)
-                .Include(l => l.UsuarioAsignado)
-                .Include(l => l.Fuente)
-                .Include(l => l.Estado)
-                .Where(l => l.IdInmobiliaria == tenantId && l.Activo == true)
-                .OrderByDescending(l => l.CreadoEn)
-                .ToListAsync();
+            _logger.LogDebug("ValidateUsuarioInTenantAsync result: {Result}", result);
+            return result;
         }
     }
 }

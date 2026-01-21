@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using inmobiliariaApi.DTOs.Lead;
 using inmobiliariaApi.Services;
+using Microsoft.Extensions.Logging;
 
 namespace inmobiliariaApi.Controllers
 {
@@ -20,7 +21,13 @@ namespace inmobiliariaApi.Controllers
         private int GetTenantId()
         {
             var tenantClaim = User.FindFirst("IdInmobiliaria");
-            return tenantClaim != null ? int.Parse(tenantClaim.Value) : 0;
+            var tenantId = tenantClaim != null ? int.Parse(tenantClaim.Value) : 0;
+
+            // LOG para debugging
+            var logger = HttpContext.RequestServices.GetService<ILogger<LeadController>>();
+            logger?.LogDebug("GetTenantId from claims: {TenantId}, Claim exists: {ClaimExists}", tenantId, tenantClaim != null);
+
+            return tenantId;
         }
 
         private int GetUserId()
@@ -126,6 +133,9 @@ namespace inmobiliariaApi.Controllers
         [Authorize(Roles = "Administrador,Supervisor,Agente")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateLeadDto updateDto)
         {
+            var logger = HttpContext.RequestServices.GetService<ILogger<LeadController>>();
+            logger?.LogInformation("UPDATE Lead endpoint called for ID: {Id}", id);
+
             if (id <= 0)
             {
                 return BadRequest(new { Success = false, Message = "ID no válido." });
@@ -141,9 +151,11 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "ID no coincide." });
 
             var tenantId = GetTenantId();
+            logger?.LogInformation("Tenant ID obtenido del token: {TenantId} para actualizar lead {LeadId}", tenantId, id);
 
             if (tenantId <= 0)
             {
+                logger?.LogWarning("Tenant ID no válido: {TenantId}", tenantId);
                 return BadRequest(new { Success = false, Message = "Tenant no válido." });
             }
 

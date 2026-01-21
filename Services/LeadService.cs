@@ -138,13 +138,17 @@ namespace inmobiliariaApi.Services
             try
             {
                 _logger.LogInformation("Creando lead: {Nombre} en tenant: {TenantId}", createDto.NombreCompleto, tenantId);
+                _logger.LogDebug("CreateLeadAsync payload: {@CreateDto}", createDto);
 
                 // Validar propiedad si se especifica
                 if (createDto.IdPropiedad.HasValue)
                 {
+                    _logger.LogDebug("Validando propiedad {PropiedadId} para tenant {TenantId}", createDto.IdPropiedad.Value, tenantId);
                     var propiedadValida = await _leadRepository.ValidatePropiedadInTenantAsync(createDto.IdPropiedad.Value, tenantId);
+                    _logger.LogDebug("Resultado validación propiedad: {Valida}", propiedadValida);
                     if (!propiedadValida)
                     {
+                        _logger.LogWarning("Propiedad {PropiedadId} no pertenece al tenant {TenantId}", createDto.IdPropiedad.Value, tenantId);
                         return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
@@ -156,9 +160,12 @@ namespace inmobiliariaApi.Services
                 // Validar usuario asignado si se especifica
                 if (createDto.IdUsuarioAsignado.HasValue && createDto.IdUsuarioAsignado.Value > 0)
                 {
+                    _logger.LogDebug("Validando usuario asignado {UsuarioId} para tenant {TenantId}", createDto.IdUsuarioAsignado.Value, tenantId);
                     var usuarioValido = await _leadRepository.ValidateUsuarioInTenantAsync(createDto.IdUsuarioAsignado.Value, tenantId);
+                    _logger.LogDebug("Resultado validación usuario asignado: {Valido}", usuarioValido);
                     if (!usuarioValido)
                     {
+                        _logger.LogWarning("Usuario asignado {UsuarioId} inválido para tenant {TenantId}", createDto.IdUsuarioAsignado.Value, tenantId);
                         return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
@@ -168,10 +175,13 @@ namespace inmobiliariaApi.Services
                 }
 
                 // Validar que la fuente de contacto existe
+                _logger.LogDebug("Validando fuente de contacto {FuenteId}", createDto.IdFuente);
                 var fuenteExists = await _context.FuenteContacto
                     .AnyAsync(f => f.Id == createDto.IdFuente);
+                _logger.LogDebug("Resultado validación fuente: {Existe}", fuenteExists);
                 if (!fuenteExists)
                 {
+                    _logger.LogWarning("Fuente de contacto {FuenteId} no encontrada", createDto.IdFuente);
                     return new BaseResponseDto<LeadDto>
                     {
                         Success = false,
@@ -195,31 +205,54 @@ namespace inmobiliariaApi.Services
                     ActualizadoEn = DateTime.UtcNow
                 };
 
+                _logger.LogDebug("Guardando lead en repositorio para tenant {TenantId}: {@Lead}", tenantId, lead);
                 var result = await _leadRepository.AddAsync(lead);
+                _logger.LogInformation("Lead guardado. Id asignado: {LeadId}", result?.Id);
 
                 // Incrementar contador mensual
-                await _usoMensualService.IncrementarLeadsMesActualAsync(tenantId);
+                try
+                {
+                    _logger.LogDebug("Incrementando contador mensual de leads para tenant {TenantId}", tenantId);
+                    await _usoMensualService.IncrementarLeadsMesActualAsync(tenantId);
+                    _logger.LogDebug("Contador mensual incrementado para tenant {TenantId}", tenantId);
+                }
+                catch (Exception exUso)
+                {
+                    _logger.LogError(exUso, "Fallo al incrementar uso mensual para tenant {TenantId}", tenantId);
+                    // no detener creación por fallo en métricas; se puede decidir reintentar desde logs
+                }
 
                 // Crear historial de estado inicial
                 if (usuarioCreadorId.HasValue)
                 {
-                    var historial = new LeadEstadoHistorial
+                    try
                     {
-                        IdLead = result.Id,
-                        IdEstadoAnterior = 0,
-                        IdEstadoNuevo = result.IdEstado,
-                        IdUsuario = usuarioCreadorId.Value,
-                        Comentario = "Lead creado",
-                        CreadoEn = DateTime.UtcNow
-                    };
+                        var historial = new LeadEstadoHistorial
+                        {
+                            IdLead = result.Id,
+                            IdEstadoAnterior = 0,
+                            IdEstadoNuevo = result.IdEstado,
+                            IdUsuario = usuarioCreadorId.Value,
+                            Comentario = "Lead creado",
+                            CreadoEn = DateTime.UtcNow
+                        };
 
-                    _context.LeadEstadoHistorial.Add(historial);
-                    await _context.SaveChangesAsync();
+                        _context.LeadEstadoHistorial.Add(historial);
+                        _logger.LogDebug("Guardando historial inicial para lead {LeadId}", result.Id);
+                        await _context.SaveChangesAsync();
+                        _logger.LogDebug("Historial inicial guardado para lead {LeadId}", result.Id);
+                    }
+                    catch (Exception exHist)
+                    {
+                        _logger.LogError(exHist, "Error al guardar historial inicial para lead {LeadId}", result.Id);
+                        // seguir adelante, pero registrar
+                    }
                 }
 
                 _logger.LogInformation("Lead creado exitosamente con ID: {Id}", result.Id);
 
                 var leadConDetalles = await _leadRepository.GetByIdAndTenantAsync(result.Id, tenantId);
+                _logger.LogDebug("Lead con detalles obtenido: {@LeadDetalles}", leadConDetalles);
                 var responseDto = MapToResponseDto(leadConDetalles ?? result);
 
                 return new BaseResponseDto<LeadDto>
@@ -245,9 +278,15 @@ namespace inmobiliariaApi.Services
         {
             try
             {
+                _logger.LogInformation("Actualizando lead ID: {Id} en tenant: {TenantId}", updateDto.Id, tenantId);
+                _logger.LogDebug("UpdateLeadAsync payload: {@UpdateDto}", updateDto);
+
                 var existingLead = await _leadRepository.GetByIdAndTenantAsync(updateDto.Id, tenantId);
+                _logger.LogDebug("Lead existente obtenido: {@ExistingLead}", existingLead);
+
                 if (existingLead == null)
                 {
+                    _logger.LogWarning("Lead ID: {Id} no encontrado para tenant: {TenantId}", updateDto.Id, tenantId);
                     return new BaseResponseDto<LeadDto>
                     {
                         Success = false,
@@ -255,12 +294,18 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
+                _logger.LogDebug("Lead encontrado. Tenant del lead: {LeadTenant}, Tenant solicitado: {RequestedTenant}",
+                    existingLead.IdInmobiliaria, tenantId);
+
                 // Validar propiedad si se cambia
                 if (updateDto.IdPropiedad.HasValue && updateDto.IdPropiedad.Value != existingLead.IdPropiedad)
                 {
+                    _logger.LogDebug("Validando cambio de propiedad de {PropiedadActual} a {PropiedadNueva}", existingLead.IdPropiedad, updateDto.IdPropiedad.Value);
                     var propiedadValida = await _leadRepository.ValidatePropiedadInTenantAsync(updateDto.IdPropiedad.Value, tenantId);
+                    _logger.LogDebug("Resultado validación propiedad: {Valida}", propiedadValida);
                     if (!propiedadValida)
                     {
+                        _logger.LogWarning("Propiedad {PropiedadId} no válida para tenant {TenantId}", updateDto.IdPropiedad.Value, tenantId);
                         return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
@@ -272,9 +317,12 @@ namespace inmobiliariaApi.Services
                 // Validar usuario asignado si se cambia
                 if (updateDto.IdUsuarioAsignado.HasValue && updateDto.IdUsuarioAsignado.Value > 0)
                 {
+                    _logger.LogDebug("Validando usuario asignado {UsuarioId} para tenant {TenantId}", updateDto.IdUsuarioAsignado.Value, tenantId);
                     var usuarioValido = await _leadRepository.ValidateUsuarioInTenantAsync(updateDto.IdUsuarioAsignado.Value, tenantId);
+                    _logger.LogDebug("Resultado validación usuario: {Valido}", usuarioValido);
                     if (!usuarioValido)
                     {
+                        _logger.LogWarning("Usuario {UsuarioId} no válido para tenant {TenantId}", updateDto.IdUsuarioAsignado.Value, tenantId);
                         return new BaseResponseDto<LeadDto>
                         {
                             Success = false,
@@ -283,41 +331,85 @@ namespace inmobiliariaApi.Services
                     }
                 }
 
+                _logger.LogDebug("Aplicando cambios al lead existente");
+
                 // Actualizar campos si vienen en el DTO
                 if (updateDto.IdPropiedad.HasValue)
-                    existingLead.IdPropiedad = updateDto.IdPropiedad.Value == 0 ? null : updateDto.IdPropiedad.Value;
+                {
+                    // FIX: Usar cast explícito para evitar ambigüedad entre null e int
+                    var nuevaPropiedad = updateDto.IdPropiedad.Value == 0 ? (int?)null : updateDto.IdPropiedad.Value;
+                    _logger.LogDebug("Cambiando propiedad de {Anterior} a {Nueva}", existingLead.IdPropiedad, nuevaPropiedad);
+                    existingLead.IdPropiedad = nuevaPropiedad;
+                }
 
                 if (!string.IsNullOrWhiteSpace(updateDto.NombreCompleto))
+                {
+                    _logger.LogDebug("Cambiando nombre de '{Anterior}' a '{Nuevo}'", existingLead.NombreCompleto, updateDto.NombreCompleto.Trim());
                     existingLead.NombreCompleto = updateDto.NombreCompleto.Trim();
+                }
 
                 if (updateDto.Email != null)
-                    existingLead.Email = string.IsNullOrWhiteSpace(updateDto.Email) ? null : updateDto.Email.Trim();
+                {
+                    var nuevoEmail = string.IsNullOrWhiteSpace(updateDto.Email) ? null : updateDto.Email.Trim();
+                    _logger.LogDebug("Cambiando email de '{Anterior}' a '{Nuevo}'", existingLead.Email, nuevoEmail);
+                    existingLead.Email = nuevoEmail;
+                }
 
                 if (updateDto.Telefono != null)
-                    existingLead.Telefono = string.IsNullOrWhiteSpace(updateDto.Telefono) ? null : updateDto.Telefono.Trim();
+                {
+                    var nuevoTelefono = string.IsNullOrWhiteSpace(updateDto.Telefono) ? null : updateDto.Telefono.Trim();
+                    _logger.LogDebug("Cambiando teléfono de '{Anterior}' a '{Nuevo}'", existingLead.Telefono, nuevoTelefono);
+                    existingLead.Telefono = nuevoTelefono;
+                }
 
                 if (updateDto.Mensaje != null)
-                    existingLead.Mensaje = string.IsNullOrWhiteSpace(updateDto.Mensaje) ? null : updateDto.Mensaje.Trim();
+                {
+                    var nuevoMensaje = string.IsNullOrWhiteSpace(updateDto.Mensaje) ? null : updateDto.Mensaje.Trim();
+                    _logger.LogDebug("Cambiando mensaje");
+                    existingLead.Mensaje = nuevoMensaje;
+                }
 
                 if (updateDto.IdFuente.HasValue)
+                {
+                    _logger.LogDebug("Cambiando fuente de {Anterior} a {Nueva}", existingLead.IdFuente, updateDto.IdFuente.Value);
                     existingLead.IdFuente = updateDto.IdFuente.Value;
+                }
 
                 if (updateDto.IdUsuarioAsignado.HasValue)
-                    existingLead.IdUsuarioAsignado = updateDto.IdUsuarioAsignado.Value == 0 ? null : updateDto.IdUsuarioAsignado.Value;
+                {
+                    // FIX: Usar cast explícito para evitar ambigüedad entre null e int
+                    var nuevoUsuario = updateDto.IdUsuarioAsignado.Value == 0 ? (int?)null : updateDto.IdUsuarioAsignado.Value;
+                    _logger.LogDebug("Cambiando usuario asignado de {Anterior} a {Nuevo}", existingLead.IdUsuarioAsignado, nuevoUsuario);
+                    existingLead.IdUsuarioAsignado = nuevoUsuario;
+                }
 
                 if (updateDto.IdEstado.HasValue)
+                {
+                    _logger.LogDebug("Cambiando estado de {Anterior} a {Nuevo}", existingLead.IdEstado, updateDto.IdEstado.Value);
                     existingLead.IdEstado = updateDto.IdEstado.Value;
+                }
 
                 if (updateDto.Activo.HasValue)
+                {
+                    _logger.LogDebug("Cambiando activo de {Anterior} a {Nuevo}", existingLead.Activo, updateDto.Activo.Value);
                     existingLead.Activo = updateDto.Activo.Value;
+                }
 
                 // NO permitir cambio de inmobiliaria
+                _logger.LogDebug("Antes de forzar tenant - Lead tenant: {LeadTenant}, Service tenant: {ServiceTenant}",
+                    existingLead.IdInmobiliaria, tenantId);
+
                 existingLead.IdInmobiliaria = tenantId;
                 existingLead.ActualizadoEn = DateTime.UtcNow;
 
+                _logger.LogDebug("Después de forzar tenant - Lead tenant: {LeadTenant}", existingLead.IdInmobiliaria);
+                _logger.LogDebug("Guardando cambios en repositorio: {@LeadModificado}", existingLead);
+
                 await _leadRepository.UpdateAsync(existingLead);
+                _logger.LogInformation("Lead {Id} actualizado exitosamente", existingLead.Id);
 
                 var updatedLead = await _leadRepository.GetByIdAndTenantAsync(existingLead.Id, tenantId);
+                _logger.LogDebug("Lead actualizado recuperado: {@UpdatedLead}", updatedLead);
                 var responseDto = MapToResponseDto(updatedLead ?? existingLead);
 
                 return new BaseResponseDto<LeadDto>
