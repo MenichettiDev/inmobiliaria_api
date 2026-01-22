@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace inmobiliariaApi.Models
 {
-    [Table("lead_estados_historial")]
+    [Table("lead_estado_historial")] // ajustar si la tabla tiene otro nombre
     public class LeadEstadoHistorial
     {
         [Key]
@@ -17,7 +17,7 @@ namespace inmobiliariaApi.Models
         public int IdEstadoAnterior { get; set; }
 
         [Required]
-        [Column("id_estado_nuevo")]
+        [Column("id_estado")]
         public int IdEstadoNuevo { get; set; }
 
         [Required]
