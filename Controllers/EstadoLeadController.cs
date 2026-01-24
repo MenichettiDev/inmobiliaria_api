@@ -202,5 +202,22 @@ namespace inmobiliariaApi.Controllers
             await _estadoRepository.DeleteAsync(id);
             return Ok(new { Success = true, Message = "Estado de lead eliminado correctamente" });
         }
+
+        // GET: api/estadolead/combo (Estados básicos para combos)
+        [HttpGet("combo")]
+        [Authorize(Roles = "Programador,Administrador,Supervisor,Agente")] // Todos pueden consultar para combos
+        public async Task<IActionResult> GetEstadosCombo()
+        {
+            // Get only basic states (IDs 1-5)
+            var estados = await _estadoRepository.FindAsync(e => e.Id >= 1 && e.Id <= 5);
+
+            var result = estados.Select(e => new EstadoLeadComboDto
+            {
+                Id = e.Id,
+                Nombre = e.Nombre
+            }).OrderBy(e => e.Id);
+
+            return Ok(new { Success = true, Data = result, Message = "Estados básicos obtenidos correctamente" });
+        }
     }
 }
