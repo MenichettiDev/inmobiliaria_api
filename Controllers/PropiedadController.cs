@@ -117,6 +117,17 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "El precio debe ser mayor a 0." });
             }
 
+            // Validar latitud y longitud si se proporcionan
+            if (createDto.Latitud.HasValue && (createDto.Latitud.Value < -90 || createDto.Latitud.Value > 90))
+            {
+                return BadRequest(new { Success = false, Message = "La latitud debe estar entre -90 y 90." });
+            }
+
+            if (createDto.Longitud.HasValue && (createDto.Longitud.Value < -180 || createDto.Longitud.Value > 180))
+            {
+                return BadRequest(new { Success = false, Message = "La longitud debe estar entre -180 y 180." });
+            }
+
             // Asignar automáticamente el tenant del usuario autenticado
             // NO tomar el IdInmobiliaria del DTO, siempre usar el del tenant
             createDto.IdInmobiliaria = tenantId;
