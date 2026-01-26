@@ -1,7 +1,15 @@
 using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
 namespace inmobiliariaApi.DTOs.Propiedad
 {
+    public class UpdateImagenInPropiedadDto
+    {
+        public int Id { get; set; }
+        public string? Url { get; set; }
+        public int Orden { get; set; }
+    }
+
     public class UpdatePropiedadDto
     {
         [Required]
@@ -28,5 +36,10 @@ namespace inmobiliariaApi.DTOs.Propiedad
 
         // El IdInmobiliaria NO se puede cambiar y NO viene del usuario
         public int? IdInmobiliaria { get; set; }
+
+        // Imágenes: agregar (URLs o data-urls), eliminar (ids) y actualizar (id + url + orden)
+        public List<string>? ImagenesParaAgregar { get; set; } = new List<string>();
+        public List<int>? ImagenesParaEliminar { get; set; } = new List<int>();
+        public List<UpdateImagenInPropiedadDto>? ImagenesParaActualizar { get; set; } = new List<UpdateImagenInPropiedadDto>();
     }
 }

@@ -181,7 +181,7 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "Tenant no válido." });
             }
 
-            var response = await _imagenService.DeleteAsync(id, tenantId);
+            var response = await _imagenService.DeleteAsync(id, tenantId); // borra DB y archivo
             if (response.Success)
                 return Ok(response);
             return BadRequest(response);

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using inmobiliariaApi.DTOs.Common;
 using inmobiliariaApi.DTOs.Propiedad;
+using inmobiliariaApi.DTOs.ImagenPropiedad; // añadida
 using inmobiliariaApi.Models;
 using inmobiliariaApi.Repositories;
 
@@ -38,7 +39,17 @@ namespace inmobiliariaApi.Services
                 IdEstadoAdmin = propiedad.IdEstadoAdmin,
                 IdEstadoOperativo = propiedad.IdEstadoOperativo,
                 EstadoAdminNombre = propiedad.EstadoAdmin?.Descripcion,
-                EstadoOperativoNombre = propiedad.EstadoOperativo?.Descripcion
+                EstadoOperativoNombre = propiedad.EstadoOperativo?.Descripcion,
+                // Mapear imágenes relacionadas (si existen)
+                Imagenes = propiedad.Imagenes?.Select(i => new ImagenPropiedadDto
+                {
+                    Id = i.Id,
+                    IdPropiedad = i.IdPropiedad,
+                    Url = i.Url,
+                    Orden = i.Orden,
+                    CreadoEn = i.CreadoEn,
+                    PropiedadTitulo = propiedad.Titulo
+                }).OrderBy(i => i.Orden).ToList()
             };
         }
 

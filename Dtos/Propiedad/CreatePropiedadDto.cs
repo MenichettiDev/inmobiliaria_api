@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
 namespace inmobiliariaApi.DTOs.Propiedad
 {
@@ -27,5 +28,8 @@ namespace inmobiliariaApi.DTOs.Propiedad
         // El IdInmobiliaria se asigna automáticamente desde el tenant
         // NO viene del usuario, siempre se toma del token JWT
         public int IdInmobiliaria { get; set; }
+
+        // Nuevas imágenes a crear junto con la propiedad (URLs). Opcional.
+        public List<string>? Imagenes { get; set; } = new List<string>();
     }
 }

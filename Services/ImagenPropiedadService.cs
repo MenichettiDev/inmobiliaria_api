@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using inmobiliariaApi.DTOs.Common;
 using inmobiliariaApi.DTOs.ImagenPropiedad;
 using inmobiliariaApi.Models;
 using inmobiliariaApi.Repositories;
+using System.IO;
+using System.Text.RegularExpressions;
 
 namespace inmobiliariaApi.Services
 {
@@ -10,12 +13,14 @@ namespace inmobiliariaApi.Services
     {
         private readonly ImagenPropiedadRepository _imagenRepository;
         private readonly ILogger<ImagenPropiedadService> _logger;
+        private readonly IWebHostEnvironment _env; // nueva dependencia
 
-        public ImagenPropiedadService(ImagenPropiedadRepository imagenRepository, ILogger<ImagenPropiedadService> logger)
+        public ImagenPropiedadService(ImagenPropiedadRepository imagenRepository, ILogger<ImagenPropiedadService> logger, IWebHostEnvironment env)
             : base(imagenRepository)
         {
             _imagenRepository = imagenRepository;
             _logger = logger;
+            _env = env;
         }
 
         private ImagenPropiedadDto MapToResponseDto(ImagenPropiedad imagen)
@@ -174,6 +179,24 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
+                // Si la URL viene como data:image/...;base64,... -> guardarla en disco y reemplazar createDto.Url por la ruta pública
+                if (!string.IsNullOrWhiteSpace(createDto.Url) && createDto.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        createDto.Url = await SaveBase64ImageAsync(createDto.Url, tenantId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al guardar imagen base64 para propiedad {PropiedadId}", createDto.IdPropiedad);
+                        return new BaseResponseDto<ImagenPropiedadDto>
+                        {
+                            Success = false,
+                            Message = "No se pudo guardar la imagen enviada en base64."
+                        };
+                    }
+                }
+
                 // Si no se especifica orden, asignar el siguiente disponible
                 if (createDto.Orden == 0)
                 {
@@ -215,7 +238,54 @@ namespace inmobiliariaApi.Services
             }
         }
 
-        public async Task<BaseResponseDto<ImagenPropiedadDto>> UpdateImagenAsync(UpdateImagenPropiedadDto updateDto, int tenantId)
+        // Guarda una imagen enviada como data URL base64 y devuelve la ruta pública (/uploads/...)
+        private async Task<string> SaveBase64ImageAsync(string dataUrl, int tenantId)
+        {
+            var m = Regex.Match(dataUrl, @"data:(?<mime>[\w\/\-\+\.]+);base64,(?<data>.+)");
+            if (!m.Success) throw new InvalidDataException("Formato de data URL inválido.");
+
+            var mime = m.Groups["mime"].Value.ToLowerInvariant();
+            var base64 = m.Groups["data"].Value;
+            string ext = mime switch
+            {
+                "image/png" => ".png",
+                "image/jpeg" => ".jpg",
+                "image/jpg" => ".jpg",
+                "image/gif" => ".gif",
+                _ => ".bin"
+            };
+
+            var uploadsFolder = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "propiedades", tenantId.ToString());
+            Directory.CreateDirectory(uploadsFolder);
+
+            var fileName = $"{Guid.NewGuid()}{ext}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            var bytes = Convert.FromBase64String(base64);
+            await File.WriteAllBytesAsync(filePath, bytes);
+
+            // Ruta pública relativa
+            var publicUrl = $"/uploads/propiedades/{tenantId}/{fileName}";
+            return publicUrl;
+        }
+
+        // Borra un archivo guardado si existe (acepta rutas públicas /uploads/...)
+        public void DeleteFileByUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+            try
+            {
+                var relative = url.StartsWith("/") ? url.Substring(1) : url;
+                var possible = Path.Combine(_env.WebRootPath ?? "wwwroot", relative.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(possible)) File.Delete(possible);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo eliminar archivo por URL: {Url}", url);
+            }
+        }
+
+        public async Task<BaseResponseDto<ImagenPropiedadDto>> UpdateImagenAsync(UpdateImagenPropiedadDto updateDto, int tenantId, bool deleteOldFile = true)
         {
             try
             {
@@ -229,14 +299,43 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // Actualizar campos
-                existingImagen.Url = updateDto.Url.Trim();
+                var oldUrl = existingImagen.Url;
+                string? newUrl = null;
+
+                // Si la URL viene como data:, guardarla y usar la ruta pública
+                if (!string.IsNullOrWhiteSpace(updateDto.Url) && updateDto.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        newUrl = await SaveBase64ImageAsync(updateDto.Url, tenantId);
+                        existingImagen.Url = newUrl;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al guardar imagen base64 para actualización imagen {Id}", updateDto.Id);
+                        return new BaseResponseDto<ImagenPropiedadDto>
+                        {
+                            Success = false,
+                            Message = "No se pudo guardar la imagen enviada en base64."
+                        };
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(updateDto.Url))
+                {
+                    existingImagen.Url = updateDto.Url.Trim();
+                }
+
                 existingImagen.Orden = updateDto.Orden;
 
-                // NO permitir cambio de propiedad
-                // existingImagen.IdPropiedad se mantiene igual
-
                 await _imagenRepository.UpdateAsync(existingImagen);
+
+                // Si se permite eliminar el archivo antiguo y es distinto, borrarlo
+                if (deleteOldFile && !string.IsNullOrWhiteSpace(oldUrl) && !string.IsNullOrWhiteSpace(existingImagen.Url)
+                    && !string.Equals(oldUrl, existingImagen.Url, StringComparison.OrdinalIgnoreCase)
+                    && oldUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteFileByUrl(oldUrl);
+                }
 
                 var updatedImagen = await _imagenRepository.GetByIdAndTenantAsync(existingImagen.Id, tenantId);
                 var responseDto = MapToResponseDto(updatedImagen ?? existingImagen);
@@ -260,7 +359,7 @@ namespace inmobiliariaApi.Services
             }
         }
 
-        public async Task<BaseResponseDto<object>> DeleteAsync(int id, int tenantId)
+        public async Task<BaseResponseDto<object>> DeleteAsync(int id, int tenantId, bool deleteFile = true)
         {
             try
             {
@@ -274,14 +373,23 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // Eliminación física (no lógica) ya que son solo referencias a URLs
+                var urlToDelete = imagen.Url;
+
+                // Eliminación física de registro (DB)
                 await _imagenRepository.DeleteAsync(id);
+
+                // Si se solicita, eliminar archivo físico
+                if (deleteFile && !string.IsNullOrWhiteSpace(urlToDelete) && urlToDelete.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteFileByUrl(urlToDelete);
+                }
 
                 _logger.LogInformation("Imagen ID: {Id} eliminada en tenant: {TenantId}", id, tenantId);
 
                 return new BaseResponseDto<object>
                 {
                     Success = true,
+                    Data = urlToDelete,
                     Message = "Imagen eliminada correctamente."
                 };
             }

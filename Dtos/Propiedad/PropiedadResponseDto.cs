@@ -1,3 +1,5 @@
+using inmobiliariaApi.DTOs.ImagenPropiedad;
+
 namespace inmobiliariaApi.DTOs.Propiedad
 {
     public class PropiedadResponseDto
@@ -19,5 +21,6 @@ namespace inmobiliariaApi.DTOs.Propiedad
         public int IdEstadoOperativo { get; set; }
         public string? EstadoAdminNombre { get; set; }
         public string? EstadoOperativoNombre { get; set; }
+        public List<ImagenPropiedadDto>? Imagenes { get; set; } = new List<ImagenPropiedadDto>();
     }
 }

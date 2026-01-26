@@ -20,6 +20,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Imagenes) // agregado
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 
@@ -29,6 +30,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Imagenes) // agregado
                 .FirstOrDefaultAsync(p => p.Id == id && p.IdInmobiliaria == tenantId);
         }
 
@@ -40,6 +42,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Imagenes) // agregado
                 .Where(p => p.IdInmobiliaria == tenantId);
 
             if (!string.IsNullOrEmpty(titulo))
