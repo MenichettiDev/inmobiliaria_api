@@ -4,6 +4,11 @@ using inmobiliariaApi.DTOs.Propiedad;
 using inmobiliariaApi.Services;
 using inmobiliariaApi.DTOs.ImagenPropiedad; // añadida
 using inmobiliariaApi.Data; // añadida
+using Microsoft.AspNetCore.Http;
+using System.IO;
+using System.Linq;
+using System;
+using System.Text.Json; // añadida
 
 namespace inmobiliariaApi.Controllers
 {
@@ -226,24 +231,81 @@ namespace inmobiliariaApi.Controllers
         }
 
         [HttpPut("{id}")]
+        [Consumes("application/json", "multipart/form-data")]
         [Authorize(Roles = "Administrador,Supervisor")]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdatePropiedadDto updateDto)
+        public async Task<IActionResult> Update(int id)
         {
             if (id <= 0)
             {
                 return BadRequest(new { Success = false, Message = "ID no válido." });
             }
 
-            if (!ModelState.IsValid)
+            var tenantId = GetTenantId();
+            if (tenantId <= 0)
             {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            UpdatePropiedadDto updateDto;
+
+            try
+            {
+                var form = await Request.ReadFormAsync();
+
+                // Find the JSON content in form data
+                string jsonContent = null;
+                if (form.TryGetValue("updateDto", out var values) && values.Count > 0)
+                {
+                    jsonContent = values[0];
+                }
+
+                if (string.IsNullOrWhiteSpace(jsonContent))
+                {
+                    return BadRequest(new { Success = false, Message = "No se encontraron datos válidos en la solicitud." });
+                }
+
+                // Deserialize JSON into DTO
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                updateDto = JsonSerializer.Deserialize<UpdatePropiedadDto>(jsonContent, options);
+
+                // Attach uploaded files (if any) to the DTO
+                if (form.Files?.Count > 0)
+                {
+                    updateDto.ImagenesFiles = form.Files.ToList();
+                }
+            }
+            catch (JsonException)
+            {
+                return BadRequest(new { Success = false, Message = "Formato JSON no válido." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Success = false, Message = "Error al procesar la solicitud.", Detalle = ex.Message });
+            }
+
+            if (updateDto == null)
+            {
+                return BadRequest(new { Success = false, Message = "Datos no válidos." });
             }
 
             if (id != updateDto.Id)
                 return BadRequest(new { Success = false, Message = "ID no coincide." });
 
-            var tenantId = GetTenantId();
+            // If files were uploaded, convert to data-URL base64 and add to ImagenesParaAgregar
+            if (updateDto.ImagenesFiles != null && updateDto.ImagenesFiles.Any())
+            {
+                updateDto.ImagenesParaAgregar ??= new List<string>();
+                foreach (var formFile in updateDto.ImagenesFiles)
+                {
+                    if (formFile == null || formFile.Length == 0) continue;
+                    using var ms = new MemoryStream();
+                    await formFile.CopyToAsync(ms);
+                    var bytes = ms.ToArray();
+                    var base64 = Convert.ToBase64String(bytes);
+                    var dataUrl = $"data:{formFile.ContentType};base64,{base64}";
+                    updateDto.ImagenesParaAgregar.Add(dataUrl);
+                }
+            }
 
             // Forzar que mantenga el mismo tenant
             updateDto.IdInmobiliaria = tenantId;

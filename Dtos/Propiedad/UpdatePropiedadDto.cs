@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
 
 namespace inmobiliariaApi.DTOs.Propiedad
 {
@@ -39,6 +40,8 @@ namespace inmobiliariaApi.DTOs.Propiedad
 
         // Imágenes: agregar (URLs o data-urls), eliminar (ids) y actualizar (id + url + orden)
         public List<string>? ImagenesParaAgregar { get; set; } = new List<string>();
+        // Si el cliente sube archivos via multipart/form-data
+        public List<IFormFile>? ImagenesFiles { get; set; } = new List<IFormFile>();
         public List<int>? ImagenesParaEliminar { get; set; } = new List<int>();
         public List<UpdateImagenInPropiedadDto>? ImagenesParaActualizar { get; set; } = new List<UpdateImagenInPropiedadDto>();
     }
