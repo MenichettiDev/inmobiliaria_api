@@ -29,7 +29,7 @@ namespace inmobiliariaApi.Controllers
 
         [HttpGet]
         [Authorize(Roles = "Administrador,Supervisor,Agente")]
-        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? nombre = null, [FromQuery] bool? activo = null)
+        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? nombre = null, [FromQuery] bool? activo = true)
         {
             var tenant = GetTenantId();
             if (tenant <= 0) return BadRequest(new { Success = false, Message = "Tenant no válido." });
