@@ -24,6 +24,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public int IdFuente { get; set; }
 
         public int? IdUsuarioAsignado { get; set; }
+        public int? IdCliente { get; set; }
         public int IdEstado { get; set; } = 1; // Por defecto "nuevo"
 
         // El IdInmobiliaria se toma del tenant (no del DTO)

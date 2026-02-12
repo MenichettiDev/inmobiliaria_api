@@ -37,6 +37,7 @@ namespace inmobiliariaApi.Services
                 IdPropiedad = lead.IdPropiedad,
                 IdInmobiliaria = lead.IdInmobiliaria,
                 IdUsuarioAsignado = lead.IdUsuarioAsignado,
+                IdCliente = lead.IdCliente,
                 NombreCompleto = lead.NombreCompleto,
                 Email = lead.Email,
                 Telefono = lead.Telefono,
@@ -49,6 +50,7 @@ namespace inmobiliariaApi.Services
                 PropiedadTitulo = lead.Propiedad?.Titulo,
                 InmobiliariaNombre = lead.Inmobiliaria?.Nombre,
                 UsuarioAsignadoNombre = lead.UsuarioAsignado?.Nombre,
+                ClienteNombre = lead.Cliente?.NombreCompleto,
                 FuenteNombre = lead.Fuente?.Nombre,
                 EstadoNombre = lead.Estado?.Nombre
             };
@@ -56,7 +58,7 @@ namespace inmobiliariaApi.Services
 
         public async Task<BaseResponseDto<PaginatedResponseDto<LeadDto>>> GetLeadsPaginatedAsync(
             int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
-            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, bool? activo = null)
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? clienteId = null, bool? activo = null)
         {
             try
             {
@@ -64,7 +66,7 @@ namespace inmobiliariaApi.Services
                 if (pageSize <= 0) pageSize = 10;
 
                 var (leads, totalRecords) = await _leadRepository.GetPagedByTenantAsync(
-                    page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, activo);
+                    page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, clienteId, activo);
 
                 var leadsDto = leads.Select(MapToResponseDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
@@ -174,6 +176,23 @@ namespace inmobiliariaApi.Services
                     }
                 }
 
+                // Validar cliente si se especifica
+                if (createDto.IdCliente.HasValue && createDto.IdCliente.Value > 0)
+                {
+                    _logger.LogDebug("Validando cliente {ClienteId} para tenant {TenantId}", createDto.IdCliente.Value, tenantId);
+                    var clienteValido = await _leadRepository.ValidateClienteInTenantAsync(createDto.IdCliente.Value, tenantId);
+                    _logger.LogDebug("Resultado validación cliente: {Valido}", clienteValido);
+                    if (!clienteValido)
+                    {
+                        _logger.LogWarning("Cliente {ClienteId} no válido para tenant {TenantId}", createDto.IdCliente.Value, tenantId);
+                        return new BaseResponseDto<LeadDto>
+                        {
+                            Success = false,
+                            Message = "El cliente especificado no pertenece a su organización o no está activo."
+                        };
+                    }
+                }
+
                 // Validar que la fuente de contacto existe
                 _logger.LogDebug("Validando fuente de contacto {FuenteId}", createDto.IdFuente);
                 var fuenteExists = await _context.FuenteContacto
@@ -194,6 +213,7 @@ namespace inmobiliariaApi.Services
                     IdPropiedad = createDto.IdPropiedad,
                     IdInmobiliaria = tenantId,
                     IdUsuarioAsignado = createDto.IdUsuarioAsignado,
+                    IdCliente = createDto.IdCliente,
                     NombreCompleto = createDto.NombreCompleto.Trim(),
                     Email = createDto.Email?.Trim(),
                     Telefono = createDto.Telefono?.Trim(),
@@ -331,6 +351,23 @@ namespace inmobiliariaApi.Services
                     }
                 }
 
+                // Validar cliente si se cambia
+                if (updateDto.IdCliente.HasValue && updateDto.IdCliente.Value > 0)
+                {
+                    _logger.LogDebug("Validando cliente {ClienteId} para tenant {TenantId}", updateDto.IdCliente.Value, tenantId);
+                    var clienteValido = await _leadRepository.ValidateClienteInTenantAsync(updateDto.IdCliente.Value, tenantId);
+                    _logger.LogDebug("Resultado validación cliente: {Valido}", clienteValido);
+                    if (!clienteValido)
+                    {
+                        _logger.LogWarning("Cliente {ClienteId} no válido para tenant {TenantId}", updateDto.IdCliente.Value, tenantId);
+                        return new BaseResponseDto<LeadDto>
+                        {
+                            Success = false,
+                            Message = "El cliente especificado no pertenece a su organización o no está activo."
+                        };
+                    }
+                }
+
                 _logger.LogDebug("Aplicando cambios al lead existente");
 
                 // Actualizar campos si vienen en el DTO
@@ -381,6 +418,14 @@ namespace inmobiliariaApi.Services
                     var nuevoUsuario = updateDto.IdUsuarioAsignado.Value == 0 ? (int?)null : updateDto.IdUsuarioAsignado.Value;
                     _logger.LogDebug("Cambiando usuario asignado de {Anterior} a {Nuevo}", existingLead.IdUsuarioAsignado, nuevoUsuario);
                     existingLead.IdUsuarioAsignado = nuevoUsuario;
+                }
+
+                if (updateDto.IdCliente.HasValue)
+                {
+                    // FIX: Usar cast explícito para evitar ambigüedad entre null e int
+                    var nuevoCliente = updateDto.IdCliente.Value == 0 ? (int?)null : updateDto.IdCliente.Value;
+                    _logger.LogDebug("Cambiando cliente de {Anterior} a {Nuevo}", existingLead.IdCliente, nuevoCliente);
+                    existingLead.IdCliente = nuevoCliente;
                 }
 
                 if (updateDto.IdEstado.HasValue)

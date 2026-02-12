@@ -119,6 +119,13 @@ namespace inmobiliariaApi.Data
                 .HasForeignKey(l => l.IdUsuarioAsignado)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Lead -> Cliente
+            modelBuilder.Entity<Lead>()
+                .HasOne(l => l.Cliente)
+                .WithMany(c => c.Leads)
+                .HasForeignKey(l => l.IdCliente)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Propiedad -> Inmobiliaria
             modelBuilder.Entity<Propiedad>()
                 .HasOne(p => p.Inmobiliaria)

@@ -6,6 +6,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public int? IdPropiedad { get; set; }
         public int IdInmobiliaria { get; set; }
         public int? IdUsuarioAsignado { get; set; }
+        public int? IdCliente { get; set; }
         public string NombreCompleto { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? Telefono { get; set; }
@@ -20,6 +21,7 @@ namespace inmobiliariaApi.DTOs.Lead
         public string? PropiedadTitulo { get; set; }
         public string? InmobiliariaNombre { get; set; }
         public string? UsuarioAsignadoNombre { get; set; }
+        public string? ClienteNombre { get; set; }
         public string? FuenteNombre { get; set; }
         public string? EstadoNombre { get; set; }
         public string? EstadoAdminDescripcion { get; set; }

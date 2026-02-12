@@ -38,8 +38,10 @@ namespace inmobiliariaApi.Models
         [Column("activo")]
         public bool Activo { get; set; } = true;
 
-        // Navigation property hacia Inmobiliaria
+        // Navigation properties
         [ForeignKey("IdInmobiliaria")]
         public virtual Inmobiliaria? Inmobiliaria { get; set; }
+
+        public virtual ICollection<Lead> Leads { get; set; } = new List<Lead>();
     }
 }

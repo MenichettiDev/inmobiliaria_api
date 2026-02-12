@@ -45,6 +45,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .ToListAsync();
         }
 
@@ -57,6 +58,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .FirstOrDefaultAsync();
         }
 
@@ -88,6 +90,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .AsQueryable();
 
             // Apply Activo filter if specified
@@ -130,6 +133,11 @@ namespace inmobiliariaApi.Repositories
             if (filtros.IdPropiedad.HasValue)
             {
                 query = query.Where(l => l.IdPropiedad == filtros.IdPropiedad.Value);
+            }
+
+            if (filtros.IdCliente.HasValue)
+            {
+                query = query.Where(l => l.IdCliente == filtros.IdCliente.Value);
             }
 
             if (filtros.FechaDesde.HasValue)
@@ -308,6 +316,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.Propiedad)
                 .Include(l => l.Inmobiliaria)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Where(l => l.IdInmobiliaria == tenantId)
@@ -321,6 +330,7 @@ namespace inmobiliariaApi.Repositories
                 .Include(l => l.Propiedad)
                 .Include(l => l.Inmobiliaria)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .FirstOrDefaultAsync(l => l.Id == id && l.IdInmobiliaria == tenantId);
@@ -328,12 +338,13 @@ namespace inmobiliariaApi.Repositories
 
         public async Task<(IEnumerable<Lead> Data, int TotalRecords)> GetPagedByTenantAsync(
             int page, int pageSize, int tenantId, string? nombre = null, int? estadoId = null,
-            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, bool? activo = true)
+            int? fuenteId = null, int? usuarioAsignadoId = null, int? propiedadId = null, int? clienteId = null, bool? activo = true)
         {
             var query = _dbSet
                 .Include(l => l.Propiedad)
                 .Include(l => l.Inmobiliaria)
                 .Include(l => l.UsuarioAsignado)
+                .Include(l => l.Cliente)
                 .Include(l => l.Fuente)
                 .Include(l => l.Estado)
                 .Where(l => l.IdInmobiliaria == tenantId);
@@ -367,6 +378,14 @@ namespace inmobiliariaApi.Repositories
                 query = query.Where(l => l.IdPropiedad == propiedadId.Value);
             }
 
+            if (clienteId.HasValue)
+            {
+                if (clienteId.Value == 0)
+                    query = query.Where(l => l.IdCliente == null);
+                else
+                    query = query.Where(l => l.IdCliente == clienteId.Value);
+            }
+
             if (activo.HasValue)
             {
                 query = query.Where(l => l.Activo == activo);
@@ -397,6 +416,15 @@ namespace inmobiliariaApi.Repositories
             var result = await _context.Usuario
                 .AnyAsync(u => u.Id == usuarioId && u.IdInmobiliaria == tenantId && u.IdEstado == 1);
             _logger.LogDebug("ValidateUsuarioInTenantAsync result: {Result}", result);
+            return result;
+        }
+
+        public async Task<bool> ValidateClienteInTenantAsync(int clienteId, int tenantId)
+        {
+            _logger.LogDebug("ValidateClienteInTenantAsync check cliente {ClienteId} for tenant {TenantId}", clienteId, tenantId);
+            var result = await _context.Clientes
+                .AnyAsync(c => c.Id == clienteId && c.IdInmobiliaria == tenantId && c.Activo == true);
+            _logger.LogDebug("ValidateClienteInTenantAsync result: {Result}", result);
             return result;
         }
     }

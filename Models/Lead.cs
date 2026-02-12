@@ -19,6 +19,9 @@ namespace inmobiliariaApi.Models
         [Column("id_usuario_asignado")]
         public int? IdUsuarioAsignado { get; set; }
 
+        [Column("id_cliente")]
+        public int? IdCliente { get; set; }
+
         [Required]
         [Column("nombre_completo")]
         [MaxLength(100)]
@@ -59,6 +62,9 @@ namespace inmobiliariaApi.Models
 
         [ForeignKey("IdUsuarioAsignado")]
         public virtual Usuario? UsuarioAsignado { get; set; }
+
+        [ForeignKey("IdCliente")]
+        public virtual Cliente? Cliente { get; set; }
 
         [ForeignKey("IdFuente")]
         public virtual FuenteContacto? Fuente { get; set; }
