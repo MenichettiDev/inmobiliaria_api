@@ -27,6 +27,7 @@ namespace inmobiliariaApi.Data
         public DbSet<EstadoPropiedadActividad> EstadoPropiedadActividad { get; set; }
         public DbSet<LeadEstadoHistorial> LeadEstadoHistorial { get; set; }
         public DbSet<UsoMensual> UsoMensual { get; set; }
+        public DbSet<Cliente> Clientes { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones
@@ -37,6 +38,7 @@ namespace inmobiliariaApi.Data
             modelBuilder.Entity<Usuario>().ToTable("usuarios");
             modelBuilder.Entity<ImagenPropiedad>().ToTable("imagenes_propiedades");
             modelBuilder.Entity<Rol>().ToTable("roles");
+            modelBuilder.Entity<Cliente>().ToTable("clientes");
 
             // Mapeo de nuevas tablas para módulo de Leads - Ya configurado con [Table] attributes
             // Las siguientes líneas son opcionales ya que usamos [Table] en los modelos:
@@ -179,6 +181,13 @@ namespace inmobiliariaApi.Data
                 .HasForeignKey(h => h.IdUsuario)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Relación Cliente -> Inmobiliaria (sin asumir propiedad de navegación en Inmobiliaria)
+            modelBuilder.Entity<Cliente>()
+                .HasOne(c => c.Inmobiliaria)
+                .WithMany() // usar vacío para no depender de una colección en Inmobiliaria
+                .HasForeignKey(c => c.IdInmobiliaria)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Configurar índices únicos
             modelBuilder.Entity<Inmobiliaria>()
                 .HasIndex(i => i.Subdominio)
@@ -208,6 +217,14 @@ namespace inmobiliariaApi.Data
             modelBuilder.Entity<LeadEstadoHistorial>()
                 .Property(h => h.CreadoEn)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            modelBuilder.Entity<Cliente>()
+                .Property(c => c.CreadoEn)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            modelBuilder.Entity<Cliente>()
+                .Property(c => c.Activo)
+                .HasDefaultValue(true);
         }
     }
 }
