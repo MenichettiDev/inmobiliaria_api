@@ -65,10 +65,50 @@ namespace inmobiliariaApi.Services
                 if (page <= 0) page = 1;
                 if (pageSize <= 0) pageSize = 10;
 
+                // Obtener la página base (IDs y total) desde el repositorio
                 var (leads, totalRecords) = await _leadRepository.GetPagedByTenantAsync(
                     page, pageSize, tenantId, nombre, estadoId, fuenteId, usuarioAsignadoId, propiedadId, clienteId, activo);
 
-                var leadsDto = leads.Select(MapToResponseDto).ToList();
+                // Si no hay leads, devolver respuesta vacía rápidamente
+                if (leads == null || !leads.Any())
+                {
+                    var emptyPaginated = new PaginatedResponseDto<LeadDto>
+                    {
+                        Data = new List<LeadDto>(),
+                        Page = page,
+                        PageSize = pageSize,
+                        TotalRecords = totalRecords,
+                        TotalPages = (int)Math.Ceiling((double)totalRecords / pageSize),
+                        HasNextPage = page < (int)Math.Ceiling((double)totalRecords / pageSize),
+                        HasPreviousPage = page > 1
+                    };
+
+                    return new BaseResponseDto<PaginatedResponseDto<LeadDto>>
+                    {
+                        Success = true,
+                        Data = emptyPaginated,
+                        Message = "Leads obtenidos correctamente"
+                    };
+                }
+
+                // Cargar detalles relacionados usando DbContext para evitar que Cliente y otras relaciones lleguen null
+                var leadIds = leads.Select(l => l.Id).ToList();
+                var leadsConDetalles = await _context.Set<Lead>()
+                    .Where(l => leadIds.Contains(l.Id))
+                    .Include(l => l.Propiedad)
+                    .Include(l => l.Cliente)
+                    .Include(l => l.Inmobiliaria)
+                    .Include(l => l.UsuarioAsignado)
+                    .Include(l => l.Fuente)
+                    .Include(l => l.Estado)
+                    .ToListAsync();
+
+                // Mantener el orden original de la página
+                var orderedLeads = leadIds.Select(id => leadsConDetalles.FirstOrDefault(l => l.Id == id))
+                                          .Where(l => l != null)
+                                          .ToList()!;
+
+                var leadsDto = orderedLeads.Select(MapToResponseDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
 
                 var paginatedResponse = new PaginatedResponseDto<LeadDto>
