@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using inmobiliariaApi.Data;
 using inmobiliariaApi.Models;
+using System.Linq;
 
 namespace inmobiliariaApi.Repositories
 {
@@ -21,18 +22,17 @@ namespace inmobiliariaApi.Repositories
                 .Include(t => t.Cliente)
                 .Include(t => t.Propiedad)
                 .Include(t => t.Agente)
-                .FirstOrDefaultAsync(t => t.Id == id && t.IdInmobiliaria == tenantId);
+                .FirstOrDefaultAsync(t => t.Id == id);
         }
 
         public async Task<(IEnumerable<TransaccionHistorial> Data, int TotalRecords)> GetAllWithDetailsPagedByTenantAsync(
             int page, int pageSize, int tenantId, int? clienteId = null, int? agenteId = null, byte? tipoTransaccion = null, DateTime? fechaDesde = null, DateTime? fechaHasta = null)
         {
-            var query = _dbSet
+            IQueryable<TransaccionHistorial> query = _dbSet
                 .Include(t => t.TipoTransaccion)
                 .Include(t => t.Cliente)
                 .Include(t => t.Propiedad)
-                .Include(t => t.Agente)
-                .Where(t => t.IdInmobiliaria == tenantId);
+                .Include(t => t.Agente);
 
             if (clienteId.HasValue)
                 query = query.Where(t => t.IdCliente == clienteId.Value);
@@ -62,7 +62,6 @@ namespace inmobiliariaApi.Repositories
         public async Task<List<TransaccionHistorial>> GetTransaccionesComboAsync(int tenantId)
         {
             return await _dbSet
-                .Where(t => t.IdInmobiliaria == tenantId)
                 .OrderByDescending(t => t.FechaOperacion)
                 .Select(t => new TransaccionHistorial
                 {
