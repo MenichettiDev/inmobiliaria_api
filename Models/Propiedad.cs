@@ -67,5 +67,8 @@ namespace inmobiliariaApi.Models
 
         public virtual ICollection<Lead> Leads { get; set; } = new List<Lead>();
         public virtual ICollection<ImagenPropiedad> Imagenes { get; set; } = new List<ImagenPropiedad>();
+
+        // Transacciones relacionadas con la propiedad
+        public virtual ICollection<TransaccionHistorial> TransaccionesHistorial { get; set; } = new List<TransaccionHistorial>();
     }
 }

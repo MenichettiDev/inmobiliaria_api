@@ -56,5 +56,8 @@ namespace inmobiliariaApi.Models
         public virtual ICollection<Lead> LeadsAsignados { get; set; } = new List<Lead>();
         public virtual ICollection<Propiedad> PropiedadesResponsable { get; set; } = new List<Propiedad>();
         public virtual ICollection<LeadEstadoHistorial> CambiosEstadoLead { get; set; } = new List<LeadEstadoHistorial>();
+
+        // Transacciones donde el usuario es el agente
+        public virtual ICollection<TransaccionHistorial> TransaccionesHistorial { get; set; } = new List<TransaccionHistorial>();
     }
 }
