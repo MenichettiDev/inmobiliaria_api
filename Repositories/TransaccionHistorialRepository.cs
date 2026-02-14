@@ -22,46 +22,59 @@ namespace inmobiliariaApi.Repositories
                 .Include(t => t.Cliente)
                 .Include(t => t.Propiedad)
                 .Include(t => t.Agente)
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .FirstOrDefaultAsync(t => t.Id == id && t.IdInmobiliaria == tenantId);
         }
 
         public async Task<(IEnumerable<TransaccionHistorial> Data, int TotalRecords)> GetAllWithDetailsPagedByTenantAsync(
             int page, int pageSize, int tenantId, int? clienteId = null, int? agenteId = null, byte? tipoTransaccion = null, DateTime? fechaDesde = null, DateTime? fechaHasta = null)
         {
-            IQueryable<TransaccionHistorial> query = _dbSet
-                .Include(t => t.TipoTransaccion)
-                .Include(t => t.Cliente)
-                .Include(t => t.Propiedad)
-                .Include(t => t.Agente);
+            try
+            {
+                IQueryable<TransaccionHistorial> query = _dbSet.AsQueryable();
 
-            if (clienteId.HasValue)
-                query = query.Where(t => t.IdCliente == clienteId.Value);
+                query = query
+                    .Include(t => t.TipoTransaccion)
+                    .Include(t => t.Cliente)
+                    .Include(t => t.Propiedad)
+                    .Include(t => t.Agente)
+                    // filtrar siempre por tenant
+                    .Where(t => t.IdInmobiliaria == tenantId);
 
-            if (agenteId.HasValue)
-                query = query.Where(t => t.IdAgente == agenteId.Value);
+                if (clienteId.HasValue)
+                    query = query.Where(t => t.IdCliente == clienteId.Value);
 
-            if (tipoTransaccion.HasValue)
-                query = query.Where(t => t.IdTipoTransaccion == tipoTransaccion.Value);
+                if (agenteId.HasValue)
+                    query = query.Where(t => t.IdAgente == agenteId.Value);
 
-            if (fechaDesde.HasValue)
-                query = query.Where(t => t.FechaOperacion >= fechaDesde.Value);
+                if (tipoTransaccion.HasValue)
+                    query = query.Where(t => t.IdTipoTransaccion == tipoTransaccion.Value);
 
-            if (fechaHasta.HasValue)
-                query = query.Where(t => t.FechaOperacion <= fechaHasta.Value);
+                if (fechaDesde.HasValue)
+                    query = query.Where(t => t.FechaOperacion >= fechaDesde.Value);
 
-            var total = await query.CountAsync();
-            var data = await query
-                .OrderByDescending(t => t.FechaOperacion)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
+                if (fechaHasta.HasValue)
+                    query = query.Where(t => t.FechaOperacion <= fechaHasta.Value);
 
-            return (data, total);
+                var total = await query.CountAsync();
+                var data = await query
+                    .OrderByDescending(t => t.FechaOperacion)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+
+                return (data, total);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en GetAllWithDetailsPagedByTenantAsync");
+                return (Enumerable.Empty<TransaccionHistorial>(), 0);
+            }
         }
 
         public async Task<List<TransaccionHistorial>> GetTransaccionesComboAsync(int tenantId)
         {
             return await _dbSet
+                .Where(t => t.IdInmobiliaria == tenantId)
                 .OrderByDescending(t => t.FechaOperacion)
                 .Select(t => new TransaccionHistorial
                 {
