@@ -21,6 +21,9 @@ public class TenantValidationMiddleware
             var path = context.Request.Path.Value?.ToLower();
             if (path != null && (
                 path.StartsWith("/api/auth/login") ||
+                path.StartsWith("/api/auth/refresh") ||
+                path.StartsWith("/api/billing/webhook") ||
+                path.StartsWith("/api/onboarding") ||
                 path.StartsWith("/api/public") ||
                 path.StartsWith("/api/usuario/validate") ||
                 path.StartsWith("/api/usuario/debug") ||
@@ -63,8 +66,18 @@ public class TenantValidationMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error en TenantValidationMiddleware para path: {Path}", context.Request.Path);
+            
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsync("Ocurrió un error interno en el servidor.");
+            context.Response.ContentType = "application/json";
+            
+            var errorResponse = new
+            {
+                status = 500,
+                error = "Internal Server Error",
+                message = "Ocurrió un error interno en el servidor."
+            };
+            
+            await context.Response.WriteAsJsonAsync(errorResponse);
         }
     }
 }

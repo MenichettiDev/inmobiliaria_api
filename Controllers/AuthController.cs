@@ -3,9 +3,9 @@ using System.Security.Claims;
 using System.Text;
 using inmobiliariaApi.Services;
 using inmobiliariaApi.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace inmobiliariaApi.Controllers
@@ -15,22 +15,26 @@ namespace inmobiliariaApi.Controllers
     public class AuthController : ControllerBase
     {
         private readonly UsuarioService _usuarioService;
+        private readonly RefreshTokenService _refreshTokenService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             UsuarioService usuarioService,
+            RefreshTokenService refreshTokenService,
             IConfiguration configuration,
             ILogger<AuthController> logger
         )
         {
             _usuarioService = usuarioService;
+            _refreshTokenService = refreshTokenService;
             _configuration = configuration;
             _logger = logger;
         }
 
         // POST: api/auth/login
         [HttpPost("login")]
+        [EnableRateLimiting("login-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
@@ -40,14 +44,12 @@ namespace inmobiliariaApi.Controllers
                     request.Email ?? "(nulo)",
                     string.IsNullOrEmpty(request.Password)
                 );
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        error = "Bad Request",
-                        message = "El email y la contraseña son obligatorios.",
-                    }
-                );
+                return BadRequest(new
+                {
+                    status = 400,
+                    error = "Bad Request",
+                    message = "El email y la contraseña son obligatorios.",
+                });
             }
 
             var authResponse = await _usuarioService.AuthenticateAsync(request.Email, request.Password);
@@ -55,14 +57,12 @@ namespace inmobiliariaApi.Controllers
             {
                 _logger.LogWarning("Login fallido para el email: {Email}. Error: {Error}",
                     request.Email, authResponse.Message);
-                return Unauthorized(
-                    new
-                    {
-                        status = 401,
-                        error = "Unauthorized",
-                        message = "Email o contraseña incorrectos.",
-                    }
-                );
+                return Unauthorized(new
+                {
+                    status = 401,
+                    error = "Unauthorized",
+                    message = "Email o contraseña incorrectos.",
+                });
             }
 
             var usuario = authResponse.Data;
@@ -73,29 +73,99 @@ namespace inmobiliariaApi.Controllers
             }
 
             _logger.LogInformation("Usuario logueado exitosamente: {Email}", usuario.Email);
-            var token = GenerateJwtToken(usuario);
 
-            return Ok(
-                new
+            var accessToken = GenerateJwtToken(usuario);
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var refreshToken = await _refreshTokenService.GenerateAsync(usuario.Id, usuario.IdInmobiliaria, ip);
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Inicio de sesión exitoso.",
+                token = accessToken,
+                refresh_token = refreshToken.Token,
+                expires_in = 900, // 15 minutos en segundos
+                usuario = new
                 {
-                    status = 200,
-                    message = "Inicio de sesión exitoso.",
-                    token,
-                    usuario = new
-                    {
-                        usuario.Id,
-                        usuario.IdInmobiliaria,
-                        usuario.Nombre,
-                        usuario.Email,
-                        usuario.IdRol,
-                        RolNombre = usuario.Rol?.Nombre,
-                        usuario.IdEstado,
-                    },
-                }
-            );
+                    usuario.Id,
+                    usuario.IdInmobiliaria,
+                    usuario.Nombre,
+                    usuario.Email,
+                    usuario.IdRol,
+                    RolNombre = usuario.Rol?.Nombre,
+                    usuario.IdEstado,
+                },
+            });
         }
 
-        // Método auxiliar para generar token JWT
+        // POST: api/auth/refresh
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+        {
+            if (string.IsNullOrEmpty(request.RefreshToken))
+            {
+                return BadRequest(new { status = 400, message = "El refresh_token es obligatorio." });
+            }
+
+            var (valid, storedToken, error) = await _refreshTokenService.ValidateAsync(request.RefreshToken);
+            if (!valid || storedToken == null)
+            {
+                return Unauthorized(new { status = 401, message = error });
+            }
+
+            var usuario = storedToken.Usuario;
+            if (usuario == null)
+            {
+                return Unauthorized(new { status = 401, message = "Usuario no encontrado." });
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var newRefreshToken = await _refreshTokenService.RotateAsync(storedToken, ip);
+            var newAccessToken = GenerateJwtToken(usuario);
+
+            _logger.LogInformation("Access token renovado para usuario {Email}", usuario.Email);
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Token renovado correctamente.",
+                token = newAccessToken,
+                refresh_token = newRefreshToken.Token,
+                expires_in = 900,
+            });
+        }
+
+        // POST: api/auth/logout
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout([FromBody] RefreshRequest request)
+        {
+            if (!string.IsNullOrEmpty(request.RefreshToken))
+            {
+                await _refreshTokenService.RevokeAsync(request.RefreshToken);
+            }
+
+            _logger.LogInformation("Logout ejecutado.");
+            return Ok(new { status = 200, message = "Sesión cerrada correctamente." });
+        }
+
+        // POST: api/auth/logout-all  (revoca todos los tokens del usuario)
+        [HttpPost("logout-all")]
+        [Authorize]
+        public async Task<IActionResult> LogoutAll()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            await _refreshTokenService.RevokeAllByUsuarioAsync(userId);
+            _logger.LogInformation("Todos los tokens revocados para usuario {UserId}", userId);
+            return Ok(new { status = 200, message = "Todas las sesiones cerradas correctamente." });
+        }
+
+        // Genera JWT con expiración de 15 minutos
         private string GenerateJwtToken(Usuario usuario)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -116,7 +186,7 @@ namespace inmobiliariaApi.Controllers
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(3),
+                Expires = DateTime.UtcNow.AddMinutes(15),
                 Issuer = _configuration["Jwt:Issuer"],
                 Audience = _configuration["Jwt:Audience"],
                 SigningCredentials = new SigningCredentials(
@@ -134,5 +204,10 @@ namespace inmobiliariaApi.Controllers
     {
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
+    }
+
+    public class RefreshRequest
+    {
+        public string RefreshToken { get; set; } = string.Empty;
     }
 }

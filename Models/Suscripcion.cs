@@ -45,8 +45,7 @@ namespace inmobiliariaApi.Models
         [ForeignKey("IdEstado")]
         public virtual EstadoSuscripcion? Estado { get; set; }
 
-        // TODO: Agregar Plan cuando se cree el modelo
-        // [ForeignKey("IdPlan")]
-        // public virtual Plan? Plan { get; set; }
+        [ForeignKey("IdPlan")]
+        public virtual Plan? Plan { get; set; }
     }
 }

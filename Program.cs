@@ -2,12 +2,15 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -82,6 +85,7 @@ builder.Services.AddScoped<InmobiliariaRepository>();
 builder.Services.AddScoped<SuscripcionRepository>();
 builder.Services.AddScoped<TransaccionHistorialRepository>();
 builder.Services.AddScoped<TipoTransaccionRepository>();
+builder.Services.AddScoped<RefreshTokenRepository>();
 
 
 //Services
@@ -97,10 +101,77 @@ builder.Services.AddScoped<InmobiliariaService>();
 builder.Services.AddScoped<SuscripcionService>();
 builder.Services.AddScoped<TransaccionHistorialService>();
 builder.Services.AddScoped<TipoTransaccionService>();
+builder.Services.AddScoped<RefreshTokenService>();
+builder.Services.AddScoped<BillingService>();
+builder.Services.AddScoped<OnboardingService>();
+builder.Services.AddScoped<MercadoPagoService>();
+builder.Services.AddScoped<PlanGateService>();
+
+// HttpClient para MercadoPago
+builder.Services.AddHttpClient("MercadoPago", client =>
+{
+    client.BaseAddress = new Uri("https://api.mercadopago.com");
+    client.DefaultRequestHeaders.Accept.Add(
+        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 
 // Tenant Context - Multi-tenancy
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    // 429 response en JSON en lugar de texto plano
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterValue)
+            ? (int)retryAfterValue.TotalSeconds
+            : 60;
+
+        context.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
+
+        var body = JsonSerializer.Serialize(new
+        {
+            status = 429,
+            error = "Too Many Requests",
+            message = "Demasiadas solicitudes. Por favor, espere antes de intentar nuevamente.",
+            retry_after_seconds = retryAfter
+        });
+
+        await context.HttpContext.Response.WriteAsync(body, cancellationToken);
+    };
+
+    // ── Política 1: Brute-force en login — 5 intentos / 5 min por IP ──────
+    options.AddPolicy("login-ip", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
+
+    // ── Política global: 500 requests / 1 min por IP ───────────────────────
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 500,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0,
+        });
+    });
+});
 
 // Configurar Swagger
 builder.Services.AddSwaggerGen(options =>
@@ -186,6 +257,9 @@ builder.Services.AddSingleton(builder.Configuration);
 // Registrar servicios de acceso a datos
 var app = builder.Build();
 
+// Inicializar base de datos (crear tablas faltantes)
+await inmobiliariaApi.Data.DatabaseInitializer.InitializeAsync(app.Services);
+
 // Middleware
 app.UseMiddleware<TenantValidationMiddleware>();
 
@@ -202,6 +276,7 @@ app.UseCors("AllowFrontend");
 //esto va a servir el contenido estatico desde la carpeta wwwroot
 app.UseStaticFiles();
 
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

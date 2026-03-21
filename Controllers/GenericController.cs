@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using inmobiliariaApi.Services;
 
 namespace inmobiliariaApi.Controllers
 {
-    [Authorize] // Requiere autenticación para todo el controller
+    [Authorize]
+    [EnableRateLimiting("api-tenant")] // Fair-use por tenant: 500 req/min
     public abstract class GenericController<T> : ControllerBase where T : class
     {
         protected readonly GenericService<T> _service;

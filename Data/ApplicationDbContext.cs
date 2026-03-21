@@ -28,6 +28,9 @@ namespace inmobiliariaApi.Data
         public DbSet<LeadEstadoHistorial> LeadEstadoHistorial { get; set; }
         public DbSet<UsoMensual> UsoMensual { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<PagoSuscripcion> PagosSuscripcion { get; set; }
+        public DbSet<Suscripcion> Suscripciones { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones
@@ -232,6 +235,66 @@ namespace inmobiliariaApi.Data
             modelBuilder.Entity<Cliente>()
                 .Property(c => c.Activo)
                 .HasDefaultValue(true);
+
+            // RefreshToken -> Usuario
+            modelBuilder.Entity<RefreshToken>()
+                .HasOne(rt => rt.Usuario)
+                .WithMany()
+                .HasForeignKey(rt => rt.IdUsuario)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(rt => rt.Token)
+                .IsUnique();
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(rt => new { rt.IdUsuario, rt.RevocadoEn });
+
+            modelBuilder.Entity<RefreshToken>()
+                .Property(rt => rt.CreadoEn)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Suscripcion -> Plan
+            modelBuilder.Entity<Suscripcion>()
+                .HasOne(s => s.Plan)
+                .WithMany()
+                .HasForeignKey(s => s.IdPlan)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // PagoSuscripcion -> Inmobiliaria
+            modelBuilder.Entity<PagoSuscripcion>()
+                .HasOne(p => p.Inmobiliaria)
+                .WithMany()
+                .HasForeignKey(p => p.IdInmobiliaria)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // PagoSuscripcion -> Plan
+            modelBuilder.Entity<PagoSuscripcion>()
+                .HasOne(p => p.Plan)
+                .WithMany()
+                .HasForeignKey(p => p.IdPlan)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // PagoSuscripcion -> Suscripcion (nullable)
+            modelBuilder.Entity<PagoSuscripcion>()
+                .HasOne(p => p.Suscripcion)
+                .WithMany()
+                .HasForeignKey(p => p.IdSuscripcion)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PagoSuscripcion>()
+                .HasIndex(p => p.MpPreferenceId);
+
+            modelBuilder.Entity<PagoSuscripcion>()
+                .HasIndex(p => new { p.IdInmobiliaria, p.Estado });
+
+            modelBuilder.Entity<PagoSuscripcion>()
+                .Property(p => p.CreadoEn)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            modelBuilder.Entity<PagoSuscripcion>()
+                .Property(p => p.Estado)
+                .HasConversion<string>();
         }
     }
 }
