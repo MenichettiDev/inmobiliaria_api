@@ -31,6 +31,8 @@ namespace inmobiliariaApi.Data
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<PagoSuscripcion> PagosSuscripcion { get; set; }
         public DbSet<Suscripcion> Suscripciones { get; set; }
+        public DbSet<Provincia> Provincias { get; set; }
+        public DbSet<Localidad> Localidades { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones
@@ -295,6 +297,27 @@ namespace inmobiliariaApi.Data
             modelBuilder.Entity<PagoSuscripcion>()
                 .Property(p => p.Estado)
                 .HasConversion<string>();
+
+            // Provincia -> Localidades
+            modelBuilder.Entity<Localidad>()
+                .HasOne(l => l.Provincia)
+                .WithMany(p => p.Localidades)
+                .HasForeignKey(l => l.IdProvincia)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Localidad -> Propiedades
+            modelBuilder.Entity<Propiedad>()
+                .HasOne(p => p.Localidad)
+                .WithMany(l => l.Propiedades)
+                .HasForeignKey(p => p.IdLocalidad)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Provincia -> Inmobiliarias
+            modelBuilder.Entity<Inmobiliaria>()
+                .HasOne(i => i.Provincia)
+                .WithMany(p => p.Inmobiliarias)
+                .HasForeignKey(i => i.IdProvincia)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

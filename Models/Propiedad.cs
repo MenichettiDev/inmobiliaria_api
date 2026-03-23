@@ -52,7 +52,12 @@ namespace inmobiliariaApi.Models
         [Column("id_estado_operativo")]
         public int IdEstadoOperativo { get; set; } = 1;
 
+        [Column("id_localidad")]
+        public long? IdLocalidad { get; set; }
+
         // Navigation properties
+        [ForeignKey("IdLocalidad")]
+        public virtual Localidad? Localidad { get; set; }
         [ForeignKey("IdInmobiliaria")]
         public virtual Inmobiliaria? Inmobiliaria { get; set; }
 

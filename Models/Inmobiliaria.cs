@@ -34,7 +34,13 @@ namespace inmobiliariaApi.Models
         [Column("actualizado_en")]
         public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 
+        [Column("id_provincia")]
+        public long? IdProvincia { get; set; }
+
         // Navigation properties
+        [ForeignKey("IdProvincia")]
+        public virtual Provincia? Provincia { get; set; }
+
         [ForeignKey("IdPlan")]
         public virtual Plan? Plan { get; set; }
 

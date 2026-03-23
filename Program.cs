@@ -86,6 +86,8 @@ builder.Services.AddScoped<SuscripcionRepository>();
 builder.Services.AddScoped<TransaccionHistorialRepository>();
 builder.Services.AddScoped<TipoTransaccionRepository>();
 builder.Services.AddScoped<RefreshTokenRepository>();
+builder.Services.AddScoped<ProvinciaRepository>();
+builder.Services.AddScoped<LocalidadRepository>();
 
 
 //Services
@@ -104,6 +106,8 @@ builder.Services.AddScoped<TipoTransaccionService>();
 builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<OnboardingService>();
+builder.Services.AddScoped<ProvinciaService>();
+builder.Services.AddScoped<LocalidadService>();
 builder.Services.AddScoped<MercadoPagoService>();
 builder.Services.AddScoped<PlanGateService>();
 
