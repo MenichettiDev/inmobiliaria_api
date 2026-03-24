@@ -31,6 +31,7 @@ namespace inmobiliariaApi.Services
                 Latitud = propiedad.Latitud,
                 Longitud = propiedad.Longitud,
                 PublicadaEn = propiedad.PublicadaEn,
+                EsPublicada = propiedad.EsPublicada,
                 CreadoEn = propiedad.CreadoEn,
                 ActualizadoEn = propiedad.ActualizadoEn,
                 IdInmobiliaria = propiedad.IdInmobiliaria,
@@ -50,6 +51,25 @@ namespace inmobiliariaApi.Services
                     CreadoEn = i.CreadoEn,
                     PropiedadTitulo = propiedad.Titulo
                 }).OrderBy(i => i.Orden).ToList()
+            };
+        }
+
+        private PropiedadPublicaDto MapToPublicDto(Propiedad propiedad)
+        {
+            return new PropiedadPublicaDto
+            {
+                Id = propiedad.Id,
+                Titulo = propiedad.Titulo,
+                Descripcion = propiedad.Descripcion,
+                Precio = propiedad.Precio,
+                Direccion = propiedad.Direccion,
+                Latitud = propiedad.Latitud,
+                Longitud = propiedad.Longitud,
+                PublicadaEn = propiedad.PublicadaEn,
+                IdInmobiliaria = propiedad.IdInmobiliaria,
+                InmobiliariaNombre = propiedad.Inmobiliaria?.Nombre ?? string.Empty,
+                InmobiliariaSubdominio = propiedad.Inmobiliaria?.Subdominio ?? string.Empty,
+                UrlImagenes = propiedad.Imagenes?.OrderBy(i => i.Orden).Select(i => i.Url).ToList() ?? new List<string>()
             };
         }
 
@@ -423,6 +443,230 @@ namespace inmobiliariaApi.Services
                 {
                     Success = false,
                     Message = "No se pudieron cargar las propiedades para el combo.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        // ===== MÉTODOS DE PUBLICACIÓN (PRIVADOS) =====
+
+        public async Task<BaseResponseDto<object>> PublicarAsync(int id, int tenantId)
+        {
+            try
+            {
+                var propiedad = await _propiedadRepository.GetByIdWithDetailsAndTenantAsync(id, tenantId);
+                if (propiedad == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Propiedad no encontrada en su organización."
+                    };
+                }
+
+                if (propiedad.EsPublicada)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = true,
+                        Message = "La propiedad ya se encuentra publicada."
+                    };
+                }
+
+                propiedad.EsPublicada = true;
+                propiedad.PublicadaEn = DateTime.UtcNow;
+                propiedad.ActualizadoEn = DateTime.UtcNow;
+
+                await _propiedadRepository.UpdateAsync(propiedad);
+
+                _logger.LogInformation("Propiedad ID: {Id} publicada en tenant: {TenantId}", id, tenantId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Propiedad publicada correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al publicar propiedad: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al publicar la propiedad.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<object>> DespublicarAsync(int id, int tenantId)
+        {
+            try
+            {
+                var propiedad = await _propiedadRepository.GetByIdWithDetailsAndTenantAsync(id, tenantId);
+                if (propiedad == null)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = false,
+                        Message = "Propiedad no encontrada en su organización."
+                    };
+                }
+
+                if (!propiedad.EsPublicada)
+                {
+                    return new BaseResponseDto<object>
+                    {
+                        Success = true,
+                        Message = "La propiedad ya se encuentra despublicada."
+                    };
+                }
+
+                propiedad.EsPublicada = false;
+                propiedad.PublicadaEn = null;
+                propiedad.ActualizadoEn = DateTime.UtcNow;
+
+                await _propiedadRepository.UpdateAsync(propiedad);
+
+                _logger.LogInformation("Propiedad ID: {Id} despublicada en tenant: {TenantId}", id, tenantId);
+
+                return new BaseResponseDto<object>
+                {
+                    Success = true,
+                    Message = "Propiedad despublicada correctamente."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al despublicar propiedad: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<object>
+                {
+                    Success = false,
+                    Message = "Error al despublicar la propiedad.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        // ===== MÉTODOS PÚBLICOS (SIN AUTENTICACIÓN) =====
+
+        public async Task<BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>> GetPublicadasCrossTenantPagedAsync(
+            int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+        {
+            try
+            {
+                if (page <= 0) page = 1;
+                if (pageSize <= 0) pageSize = 10;
+
+                var (propiedades, totalRecords) = await _propiedadRepository.GetPublicadasCrossTenantPagedAsync(
+                    page, pageSize, titulo, precioMin, precioMax);
+
+                var propiedadesDto = propiedades.Select(MapToPublicDto).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
+
+                var paginatedResponse = new PaginatedResponseDto<PropiedadPublicaDto>
+                {
+                    Data = propiedadesDto,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalRecords = totalRecords,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                return new BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>
+                {
+                    Success = true,
+                    Data = paginatedResponse,
+                    Message = "Propiedades públicas obtenidas correctamente"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener propiedades públicas paginadas");
+                return new BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>
+                {
+                    Success = false,
+                    Message = "No se pudieron cargar las propiedades.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>> GetPublicadasBySubdominioPagedAsync(
+            string subdominio, int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+        {
+            try
+            {
+                if (page <= 0) page = 1;
+                if (pageSize <= 0) pageSize = 10;
+
+                var (propiedades, totalRecords) = await _propiedadRepository.GetPublicadasBySubdominioPagedAsync(
+                    subdominio, page, pageSize, titulo, precioMin, precioMax);
+
+                var propiedadesDto = propiedades.Select(MapToPublicDto).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
+
+                var paginatedResponse = new PaginatedResponseDto<PropiedadPublicaDto>
+                {
+                    Data = propiedadesDto,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalRecords = totalRecords,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                return new BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>
+                {
+                    Success = true,
+                    Data = paginatedResponse,
+                    Message = "Propiedades públicas obtenidas correctamente"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener propiedades públicas por subdominio: {Subdominio}", subdominio);
+                return new BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>
+                {
+                    Success = false,
+                    Message = "No se pudieron cargar las propiedades.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<PropiedadPublicaDto>> GetPublicadaByIdAsync(int id)
+        {
+            try
+            {
+                var propiedad = await _propiedadRepository.GetPublicadaByIdAsync(id);
+                if (propiedad == null)
+                {
+                    return new BaseResponseDto<PropiedadPublicaDto>
+                    {
+                        Success = false,
+                        Message = "Propiedad no encontrada o no está publicada."
+                    };
+                }
+
+                var propiedadDto = MapToPublicDto(propiedad);
+                return new BaseResponseDto<PropiedadPublicaDto>
+                {
+                    Success = true,
+                    Data = propiedadDto,
+                    Message = "Propiedad encontrada"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener propiedad pública por ID: {Id}", id);
+                return new BaseResponseDto<PropiedadPublicaDto>
+                {
+                    Success = false,
+                    Message = "Error al buscar la propiedad.",
                     Errors = new List<string> { "Error interno del servidor." }
                 };
             }

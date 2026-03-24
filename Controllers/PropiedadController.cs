@@ -507,5 +507,51 @@ namespace inmobiliariaApi.Controllers
                 return Ok(response);
             return BadRequest(response);
         }
+
+        // ===== ENDPOINTS DE PUBLICACIÓN =====
+
+        [HttpPatch("{id}/publicar")]
+        [Authorize(Roles = "Administrador,Supervisor")]
+        public async Task<IActionResult> Publicar(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _propiedadService.PublicarAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
+
+        [HttpPatch("{id}/despublicar")]
+        [Authorize(Roles = "Administrador,Supervisor")]
+        public async Task<IActionResult> Despublicar(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _propiedadService.DespublicarAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
     }
 }

@@ -105,5 +105,81 @@ namespace inmobiliariaApi.Repositories
                 })
                 .ToListAsync();
         }
+
+        // ===== MÉTODOS PÚBLICOS (SIN AUTENTICACIÓN) =====
+
+        public async Task<(IEnumerable<Propiedad> Data, int TotalRecords)> GetPublicadasCrossTenantPagedAsync(
+            int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+        {
+            var query = _dbSet
+                .Include(p => p.Inmobiliaria)
+                .Include(p => p.Imagenes)
+                .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1);
+
+            if (!string.IsNullOrEmpty(titulo))
+            {
+                query = query.Where(p => p.Titulo.Contains(titulo));
+            }
+
+            if (precioMin.HasValue)
+            {
+                query = query.Where(p => p.Precio >= precioMin.Value);
+            }
+
+            if (precioMax.HasValue)
+            {
+                query = query.Where(p => p.Precio <= precioMax.Value);
+            }
+
+            var totalRecords = await query.CountAsync();
+            var data = await query
+                .OrderByDescending(p => p.PublicadaEn)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (data, totalRecords);
+        }
+
+        public async Task<(IEnumerable<Propiedad> Data, int TotalRecords)> GetPublicadasBySubdominioPagedAsync(
+            string subdominio, int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+        {
+            var query = _dbSet
+                .Include(p => p.Inmobiliaria)
+                .Include(p => p.Imagenes)
+                .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1 && p.Inmobiliaria!.Subdominio == subdominio);
+
+            if (!string.IsNullOrEmpty(titulo))
+            {
+                query = query.Where(p => p.Titulo.Contains(titulo));
+            }
+
+            if (precioMin.HasValue)
+            {
+                query = query.Where(p => p.Precio >= precioMin.Value);
+            }
+
+            if (precioMax.HasValue)
+            {
+                query = query.Where(p => p.Precio <= precioMax.Value);
+            }
+
+            var totalRecords = await query.CountAsync();
+            var data = await query
+                .OrderByDescending(p => p.PublicadaEn)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (data, totalRecords);
+        }
+
+        public async Task<Propiedad?> GetPublicadaByIdAsync(int id)
+        {
+            return await _dbSet
+                .Include(p => p.Inmobiliaria)
+                .Include(p => p.Imagenes)
+                .FirstOrDefaultAsync(p => p.Id == id && p.EsPublicada && p.IdEstadoAdmin == 1);
+        }
     }
 }

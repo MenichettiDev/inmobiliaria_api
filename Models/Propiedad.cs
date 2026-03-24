@@ -40,6 +40,9 @@ namespace inmobiliariaApi.Models
         [Column("publicada_en")]
         public DateTime? PublicadaEn { get; set; }
 
+        [Column("es_publicada")]
+        public bool EsPublicada { get; set; } = false;
+
         [Column("creado_en")]
         public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 

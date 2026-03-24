@@ -12,6 +12,7 @@ namespace inmobiliariaApi.DTOs.Propiedad
         public decimal? Latitud { get; set; }
         public decimal? Longitud { get; set; }
         public DateTime? PublicadaEn { get; set; }
+        public bool EsPublicada { get; set; }
         public DateTime CreadoEn { get; set; }
         public DateTime ActualizadoEn { get; set; }
         public int IdInmobiliaria { get; set; }
