@@ -48,14 +48,24 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy
-                .WithOrigins(
-                    "http://localhost:4200", // Desarrollo
-                    "http://localhost:4200/", // Desarrollo
-                    "https://test.buscopropiedades.com.ar", // Producción
-                    "http://test.buscopropiedades.com.ar", // Producción
-                "http://buscopropiedades.com.ar", // Producción
-                "https://buscopropiedades.com.ar" // Producción
-                )
+                .SetIsOriginAllowed(origin =>
+                {
+                    // Permitir desarrollo local con subdominios
+                    if (origin.EndsWith(".localhost:4200", StringComparison.OrdinalIgnoreCase) ||
+                        origin.Equals("http://localhost:4200", StringComparison.OrdinalIgnoreCase) ||
+                        origin.Equals("http://127.0.0.1:4200", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Permitir dominios de producción
+                    if (origin.Contains("buscopropiedades.com.ar", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return false;
+                })
                 .AllowAnyMethod()
                 .AllowAnyHeader()
                 .AllowCredentials();

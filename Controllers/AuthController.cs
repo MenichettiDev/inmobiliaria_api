@@ -72,6 +72,15 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Message = "El usuario no existe." });
             }
 
+            // Validar subdominio si está presente (multi-tenant validation)
+            var subdomain = Request.Headers["X-Subdomain"].ToString();
+            if (!string.IsNullOrEmpty(subdomain))
+            {
+                _logger.LogInformation("Login desde subdominio: {Subdomain} para usuario: {Email}", subdomain, usuario.Email);
+                // El usuario debe pertenecer a la inmobiliaria del subdominio
+                // Por ahora solo registramos, en producción validaríamos más estrictamente
+            }
+
             _logger.LogInformation("Usuario logueado exitosamente: {Email}", usuario.Email);
 
             var accessToken = GenerateJwtToken(usuario);
@@ -85,6 +94,7 @@ namespace inmobiliariaApi.Controllers
                 token = accessToken,
                 refresh_token = refreshToken.Token,
                 expires_in = 900, // 15 minutos en segundos
+                subdomain = subdomain, // Devolver el subdominio para confirmación
                 usuario = new
                 {
                     usuario.Id,
