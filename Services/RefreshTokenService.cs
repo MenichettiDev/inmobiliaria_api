@@ -33,6 +33,14 @@ namespace inmobiliariaApi.Services
             return token;
         }
 
+        /// <summary>
+        /// Genera refresh token para usuario web (sin inmobiliaria)
+        /// </summary>
+        public async Task<RefreshToken> GenerateWebAsync(int idUsuario, string? ipOrigen = null)
+        {
+            return await GenerateAsync(idUsuario, 0, ipOrigen); // IdInmobiliaria = 0 para usuarios web
+        }
+
         public async Task<(bool Valid, RefreshToken? Token, string Error)> ValidateAsync(string token)
         {
             var stored = await _repository.GetActiveByTokenAsync(token);

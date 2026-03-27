@@ -85,6 +85,7 @@ builder.Services.AddEndpointsApiExplorer();
 //Repositorios
 builder.Services.AddScoped(typeof(GenericRepository<>));
 builder.Services.AddScoped<UsuarioRepository>();
+builder.Services.AddScoped<UsuarioWebRepository>();
 builder.Services.AddScoped<LeadRepository>();
 builder.Services.AddScoped<PropiedadRepository>();
 builder.Services.AddScoped<LeadEstadoHistorialRepository>();
@@ -103,6 +104,7 @@ builder.Services.AddScoped<LocalidadRepository>();
 //Services
 builder.Services.AddScoped(typeof(GenericService<>));
 builder.Services.AddScoped<UsuarioService>();
+builder.Services.AddScoped<UsuarioWebService>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.AddScoped<PropiedadService>();
 builder.Services.AddScoped<LeadEstadoHistorialService>();
@@ -129,6 +131,9 @@ builder.Services.AddHttpClient("MercadoPago", client =>
         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
     client.Timeout = TimeSpan.FromSeconds(15);
 });
+
+// HttpClient para Google OAuth
+builder.Services.AddHttpClient();
 
 // Tenant Context - Multi-tenancy
 builder.Services.AddHttpContextAccessor();
@@ -260,7 +265,13 @@ builder
         };
     });
 
-builder.Services.AddAuthorization(); // esto lo q hace es configurar autorización
+builder.Services.AddAuthorization(options =>
+{
+    // Política para usuarios web
+    options.AddPolicy("WebUser", policy =>
+        policy.RequireClaim("UserType", "web")
+    );
+});
 
 // Registrar servicios de negocio
 builder.Services.AddSingleton(builder.Configuration);

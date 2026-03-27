@@ -33,6 +33,8 @@ namespace inmobiliariaApi.Data
         public DbSet<Suscripcion> Suscripciones { get; set; }
         public DbSet<Provincia> Provincias { get; set; }
         public DbSet<Localidad> Localidades { get; set; }
+        public DbSet<UsuarioWeb> UsuariosWeb { get; set; }
+        public DbSet<PropiedadFavorita> PropiedadesFavoritas { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones

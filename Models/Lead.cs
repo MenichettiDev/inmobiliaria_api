@@ -22,6 +22,9 @@ namespace inmobiliariaApi.Models
         [Column("id_cliente")]
         public int? IdCliente { get; set; }
 
+        [Column("id_usuario_web")]
+        public int? IdUsuarioWeb { get; set; }
+
         [Required]
         [Column("nombre_completo")]
         [MaxLength(100)]
@@ -71,6 +74,9 @@ namespace inmobiliariaApi.Models
 
         [ForeignKey("IdEstado")]
         public virtual EstadoLead? Estado { get; set; }
+
+        [ForeignKey("IdUsuarioWeb")]
+        public virtual UsuarioWeb? UsuarioWeb { get; set; }
 
         public virtual ICollection<LeadEstadoHistorial> HistorialEstados { get; set; } = new List<LeadEstadoHistorial>();
     }
