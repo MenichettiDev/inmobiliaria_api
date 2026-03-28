@@ -252,12 +252,4 @@ namespace inmobiliariaApi.Controllers
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
-
-    /// <summary>
-    /// DTO para refresh token request
-    /// </summary>
-    public class RefreshRequest
-    {
-        public string RefreshToken { get; set; } = string.Empty;
-    }
 }

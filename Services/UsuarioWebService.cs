@@ -1,9 +1,10 @@
 using System.Text;
+using System.Text.Json;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using inmobiliariaApi.Dtos.Common;
+using inmobiliariaApi.DTOs.Common;
 using inmobiliariaApi.Dtos.UsuarioWeb;
 using inmobiliariaApi.Models;
 using inmobiliariaApi.Repositories;
@@ -281,7 +282,8 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                var json = await response.Content.ReadAsAsync<Dictionary<string, object>>();
+                var jsonString = await response.Content.ReadAsStringAsync();
+                var json = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString) ?? new Dictionary<string, object>();
 
                 // Verificar que el aud (audience) coincida con el Client ID
                 if (json.TryGetValue("aud", out var aud) && aud?.ToString() != clientId)
@@ -342,7 +344,7 @@ namespace inmobiliariaApi.Services
                     PropiedadTitulo = f.Propiedad?.Titulo ?? "Sin título",
                     PropiedadDireccion = f.Propiedad?.Direccion ?? "Sin dirección",
                     PropiedadPrecio = f.Propiedad?.Precio,
-                    PropiedadImageUrl = f.Propiedad?.UrlImagenes?.FirstOrDefault()
+                    PropiedadImageUrl = f.Propiedad?.Imagenes?.FirstOrDefault()?.Url
                 }).ToList();
 
                 return new BaseResponseDto<IEnumerable<PropiedadFavoritaDto>>
