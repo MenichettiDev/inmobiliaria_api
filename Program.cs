@@ -74,6 +74,10 @@ builder.Services.AddCors(options =>
 });
 
 // Agregar controladores y explorador de API
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 200 * 1024 * 1024; // 200 MB
+});
 builder
     .Services.AddControllers()
     .AddJsonOptions(options =>
