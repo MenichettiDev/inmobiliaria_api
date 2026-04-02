@@ -122,6 +122,7 @@ builder.Services.AddScoped<ProvinciaService>();
 builder.Services.AddScoped<LocalidadService>();
 builder.Services.AddScoped<MercadoPagoService>();
 builder.Services.AddScoped<PlanGateService>();
+builder.Services.AddScoped<CloudflareR2Service>();
 
 // HttpClient para MercadoPago
 builder.Services.AddHttpClient("MercadoPago", client =>

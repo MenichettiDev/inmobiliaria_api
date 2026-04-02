@@ -45,29 +45,6 @@ namespace inmobiliariaApi.Controllers
             return BadRequest(response);
         }
 
-        // GET: api/imagenpropiedad/{id} (Imagen específica)
-        [HttpGet("{id}")]
-        [Authorize(Roles = "Administrador,Supervisor,Agente")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            if (id <= 0)
-            {
-                return BadRequest(new { Success = false, Message = "El ID debe ser mayor a 0." });
-            }
-
-            var tenantId = GetTenantId();
-
-            if (tenantId <= 0)
-            {
-                return BadRequest(new { Success = false, Message = "Tenant no válido." });
-            }
-
-            var response = await _imagenService.GetByIdAndTenantAsync(id, tenantId);
-            if (response.Success)
-                return Ok(response);
-            return NotFound(response);
-        }
-
         // GET: api/imagenpropiedad/propiedad/{propiedadId} (Imágenes de una propiedad específica)
         [HttpGet("propiedad/{propiedadId}")]
         [Authorize(Roles = "Administrador,Supervisor,Agente")]
@@ -91,7 +68,30 @@ namespace inmobiliariaApi.Controllers
             return BadRequest(response);
         }
 
-        // POST: api/imagenpropiedad (Crear imagen)
+        // GET: api/imagenpropiedad/{id} (Imagen específica)
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El ID debe ser mayor a 0." });
+            }
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _imagenService.GetByIdAndTenantAsync(id, tenantId);
+            if (response.Success)
+                return Ok(response);
+            return NotFound(response);
+        }
+
+        // POST: api/imagenpropiedad (Crear imagen con URL externa)
         [HttpPost]
         [Authorize(Roles = "Administrador,Supervisor,Agente")]
         public async Task<IActionResult> Create([FromBody] CreateImagenPropiedadDto createDto)
@@ -123,6 +123,40 @@ namespace inmobiliariaApi.Controllers
             var response = await _imagenService.CreateImagenAsync(createDto, tenantId);
             if (response.Success)
                 return CreatedAtAction(nameof(GetById), new { id = response.Data?.Id }, response);
+            return BadRequest(response);
+        }
+
+        // POST: api/imagenpropiedad/upload (Subir imagen con archivo)
+        [HttpPost("upload")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> Upload([FromForm] UploadImagenDto uploadDto)
+        {
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            if (!Request.HasFormContentType)
+            {
+                return BadRequest(new { Success = false, Message = "El contenido debe ser multipart/form-data." });
+            }
+
+            if (uploadDto.IdPropiedad <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "El ID de la propiedad debe ser mayor a 0." });
+            }
+
+            var response = await _imagenService.UploadImagenAsync(uploadDto, tenantId);
+
+            if (response.Success)
+                return CreatedAtAction(nameof(GetById), new { id = response.Data?.Id }, response);
+
+            // Si es error de límite (402), retornar ese status
+            if (response.Message?.Contains("límite") == true || response.Message?.Contains("plan") == true)
+                return StatusCode(402, response);
+
             return BadRequest(response);
         }
 
@@ -182,6 +216,29 @@ namespace inmobiliariaApi.Controllers
             }
 
             var response = await _imagenService.DeleteAsync(id, tenantId); // borra DB y archivo
+            if (response.Success)
+                return Ok(response);
+            return BadRequest(response);
+        }
+
+        // PUT: api/imagenpropiedad/{id}/hacer-principal (Marcar como imagen principal)
+        [HttpPut("{id}/hacer-principal")]
+        [Authorize(Roles = "Administrador,Supervisor,Agente")]
+        public async Task<IActionResult> HacerPrincipal(int id)
+        {
+            if (id <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "ID no válido." });
+            }
+
+            var tenantId = GetTenantId();
+
+            if (tenantId <= 0)
+            {
+                return BadRequest(new { Success = false, Message = "Tenant no válido." });
+            }
+
+            var response = await _imagenService.HacerPrincipalAsync(id, tenantId);
             if (response.Success)
                 return Ok(response);
             return BadRequest(response);

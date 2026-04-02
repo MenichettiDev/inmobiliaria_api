@@ -66,6 +66,9 @@ namespace inmobiliariaApi.Models
         [Column("lead_scoring")]
         public bool LeadScoring { get; set; } = false;
 
+        [Column("max_imagenes_propiedad")]
+        public int? MaxImagenesPropiedad { get; set; }
+
         // Navigation properties
         public virtual ICollection<Inmobiliaria> Inmobiliarias { get; set; } = new List<Inmobiliaria>();
     }

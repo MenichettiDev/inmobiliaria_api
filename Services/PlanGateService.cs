@@ -118,6 +118,25 @@ namespace inmobiliariaApi.Services
                 : GateResult.Fail("Las automatizaciones no están incluidas en su plan actual.");
         }
 
+        public async Task<GateResult> PuedeSubirImagenAsync(int propiedadId, int idInmobiliaria)
+        {
+            var plan = await GetPlanActivoAsync(idInmobiliaria);
+            if (plan == null)
+                return GateResult.Pass(); // Sin plan = sin límite
+
+            if (plan.MaxImagenesPropiedad == null) // null = ilimitado
+                return GateResult.Pass();
+
+            var imagenActuales = await _context.ImagenPropiedad
+                .CountAsync(i => i.IdPropiedad == propiedadId);
+
+            if (imagenActuales >= plan.MaxImagenesPropiedad)
+                return GateResult.Fail(
+                    $"Límite de imágenes alcanzado ({plan.MaxImagenesPropiedad}). Actualice su plan.");
+
+            return GateResult.Pass();
+        }
+
         // Devuelve un resumen del plan y uso actual para mostrar al tenant
         public async Task<object?> GetResumenPlanAsync(int idInmobiliaria)
         {

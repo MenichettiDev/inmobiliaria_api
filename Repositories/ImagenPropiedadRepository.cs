@@ -54,6 +54,18 @@ namespace inmobiliariaApi.Repositories
                 .AnyAsync(p => p.Id == propiedadId && p.IdInmobiliaria == tenantId);
         }
 
+        public async Task<Propiedad?> GetPropiedadByIdAsync(int propiedadId)
+        {
+            return await _context.Propiedad
+                .FirstOrDefaultAsync(p => p.Id == propiedadId);
+        }
+
+        public async Task<Propiedad?> GetPropiedadByIdAndTenantAsync(int propiedadId, int tenantId)
+        {
+            return await _context.Propiedad
+                .FirstOrDefaultAsync(p => p.Id == propiedadId && p.IdInmobiliaria == tenantId);
+        }
+
         public async Task<int> GetCountByPropiedadAsync(int propiedadId)
         {
             return await _dbSet.CountAsync(i => i.IdPropiedad == propiedadId);

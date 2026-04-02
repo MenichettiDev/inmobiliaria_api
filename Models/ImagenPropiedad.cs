@@ -19,6 +19,13 @@ namespace inmobiliariaApi.Models
 
         public int Orden { get; set; } = 0;
 
+        [Column("es_principal")]
+        public bool EsPrincipal { get; set; } = false;
+
+        [MaxLength(500)]
+        [Column("r2_key")]
+        public string? R2Key { get; set; }
+
         [Column("creado_en")]
         public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 

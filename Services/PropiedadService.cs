@@ -48,6 +48,8 @@ namespace inmobiliariaApi.Services
                     IdPropiedad = i.IdPropiedad,
                     Url = i.Url,
                     Orden = i.Orden,
+                    EsPrincipal = i.EsPrincipal,
+                    R2Key = i.R2Key,
                     CreadoEn = i.CreadoEn,
                     PropiedadTitulo = propiedad.Titulo
                 }).OrderBy(i => i.Orden).ToList()

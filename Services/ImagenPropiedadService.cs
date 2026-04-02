@@ -13,14 +13,20 @@ namespace inmobiliariaApi.Services
     {
         private readonly ImagenPropiedadRepository _imagenRepository;
         private readonly ILogger<ImagenPropiedadService> _logger;
-        private readonly IWebHostEnvironment _env; // nueva dependencia
+        private readonly CloudflareR2Service _r2Service;
+        private readonly PlanGateService _planGateService;
 
-        public ImagenPropiedadService(ImagenPropiedadRepository imagenRepository, ILogger<ImagenPropiedadService> logger, IWebHostEnvironment env)
+        public ImagenPropiedadService(
+            ImagenPropiedadRepository imagenRepository,
+            ILogger<ImagenPropiedadService> logger,
+            CloudflareR2Service r2Service,
+            PlanGateService planGateService)
             : base(imagenRepository)
         {
             _imagenRepository = imagenRepository;
             _logger = logger;
-            _env = env;
+            _r2Service = r2Service;
+            _planGateService = planGateService;
         }
 
         private ImagenPropiedadDto MapToResponseDto(ImagenPropiedad imagen)
@@ -31,6 +37,8 @@ namespace inmobiliariaApi.Services
                 IdPropiedad = imagen.IdPropiedad,
                 Url = imagen.Url,
                 Orden = imagen.Orden,
+                EsPrincipal = imagen.EsPrincipal,
+                R2Key = imagen.R2Key,
                 CreadoEn = imagen.CreadoEn,
                 PropiedadTitulo = imagen.Propiedad?.Titulo
             };
@@ -151,6 +159,177 @@ namespace inmobiliariaApi.Services
             }
         }
 
+        // ── Helpers para uso desde PropiedadController (transacción unificada) ──────
+
+        public string GenerateR2Key(int tenantId, int propiedadId, string fileName)
+            => _r2Service.GenerateKey(tenantId, propiedadId, fileName);
+
+        public async Task<string> SubirArchivoR2Async(Stream stream, string key, string contentType)
+            => await _r2Service.UploadAsync(stream, key, contentType);
+
+        public async Task EliminarArchivoR2Async(string key)
+            => await _r2Service.DeleteAsync(key);
+
+        public async Task<BaseResponseDto<ImagenPropiedadDto>> CrearRegistroImagenAsync(
+            int propiedadId, string url, string r2Key, int orden, bool esPrincipal)
+        {
+            try
+            {
+                var imagen = new ImagenPropiedad
+                {
+                    IdPropiedad = propiedadId,
+                    Url = url,
+                    R2Key = r2Key,
+                    Orden = orden,
+                    EsPrincipal = esPrincipal,
+                    CreadoEn = DateTime.UtcNow
+                };
+                var result = await _imagenRepository.AddAsync(imagen);
+                return new BaseResponseDto<ImagenPropiedadDto>
+                {
+                    Success = true,
+                    Data = MapToResponseDto(result)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al crear registro de imagen en BD");
+                return new BaseResponseDto<ImagenPropiedadDto> { Success = false, Message = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Sube una imagen desde un IFormFile a Cloudflare R2
+        /// </summary>
+        public async Task<BaseResponseDto<ImagenPropiedadDto>> UploadImagenAsync(UploadImagenDto uploadDto, int tenantId)
+        {
+            try
+            {
+                _logger.LogInformation("Subiendo imagen para propiedad: {PropiedadId} en tenant: {TenantId}", uploadDto.IdPropiedad, tenantId);
+
+                // Validar que la propiedad pertenezca al tenant y obtenerla en un solo query
+                var propiedad = await _imagenRepository.GetPropiedadByIdAndTenantAsync(uploadDto.IdPropiedad, tenantId);
+                _logger.LogInformation("GetPropiedadByIdAndTenant - propiedadId:{PropiedadId} tenantId:{TenantId} encontrada:{Found}", uploadDto.IdPropiedad, tenantId, propiedad != null);
+                if (propiedad == null)
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "Propiedad no encontrada en su organización."
+                    };
+                }
+
+                // Validar límite de imágenes por plan
+                var gateResult = await _planGateService.PuedeSubirImagenAsync(uploadDto.IdPropiedad, propiedad.IdInmobiliaria);
+                if (!gateResult.Allowed)
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = gateResult.Reason ?? "No puedes subir más imágenes en tu plan actual.",
+                        Errors = new List<string> { gateResult.Reason ?? "Límite alcanzado." }
+                    };
+                }
+
+                // Validar archivo
+                if (uploadDto.Archivo == null || uploadDto.Archivo.Length == 0)
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "Debes seleccionar un archivo."
+                    };
+                }
+
+                // Validar tipo de archivo
+                var tiposPermitidos = new[] { "image/jpeg", "image/png", "image/webp" };
+                if (!tiposPermitidos.Contains(uploadDto.Archivo.ContentType?.ToLowerInvariant() ?? ""))
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "Solo se permiten imágenes JPG, PNG o WEBP."
+                    };
+                }
+
+                // Validar tamaño máximo (5MB)
+                const long maxSize = 5 * 1024 * 1024;
+                if (uploadDto.Archivo.Length > maxSize)
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "El archivo no debe exceder 5MB."
+                    };
+                }
+
+                try
+                {
+                    // Generar key y subir a R2
+                    var r2Key = _r2Service.GenerateKey(propiedad.IdInmobiliaria, uploadDto.IdPropiedad, uploadDto.Archivo.FileName);
+
+                    await using (var stream = uploadDto.Archivo.OpenReadStream())
+                    {
+                        var publicUrl = await _r2Service.UploadAsync(stream, r2Key, uploadDto.Archivo.ContentType);
+
+                        // Verificar si es la primera imagen (marcar como principal)
+                        var countImagenes = await _imagenRepository.GetCountByPropiedadAsync(uploadDto.IdPropiedad);
+                        var esPrincipal = countImagenes == 0;
+
+                        // Obtener próximo orden
+                        var maxOrden = await _imagenRepository.GetMaxOrdenByPropiedadAsync(uploadDto.IdPropiedad);
+                        var nuevoOrden = maxOrden + 1;
+
+                        // Crear registro en BD
+                        var imagen = new ImagenPropiedad
+                        {
+                            IdPropiedad = uploadDto.IdPropiedad,
+                            Url = publicUrl,
+                            R2Key = r2Key,
+                            Orden = nuevoOrden,
+                            EsPrincipal = esPrincipal,
+                            CreadoEn = DateTime.UtcNow
+                        };
+
+                        var result = await _imagenRepository.AddAsync(imagen);
+                        _logger.LogInformation("Imagen subida exitosamente con ID: {Id}, Key: {R2Key}", result.Id, r2Key);
+
+                        var imagenConDetalles = await _imagenRepository.GetByIdWithDetailsAsync(result.Id);
+                        var responseDto = MapToResponseDto(imagenConDetalles ?? result);
+
+                        return new BaseResponseDto<ImagenPropiedadDto>
+                        {
+                            Success = true,
+                            Data = responseDto,
+                            Message = "Imagen subida correctamente."
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al subir archivo a R2 para propiedad {PropiedadId}", uploadDto.IdPropiedad);
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "No se pudo subir la imagen. Intenta de nuevo."
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al procesar subida de imagen para propiedad: {PropiedadId} en tenant: {TenantId}", uploadDto?.IdPropiedad, tenantId);
+                return new BaseResponseDto<ImagenPropiedadDto>
+                {
+                    Success = false,
+                    Message = "Error al subir la imagen.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        /// <summary>
+        /// Mantiene compatibilidad con CreateImagenAsync para URLs externas
+        /// </summary>
         public async Task<BaseResponseDto<ImagenPropiedadDto>> CreateImagenAsync(CreateImagenPropiedadDto createDto, int tenantId)
         {
             try
@@ -168,33 +347,14 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // Validar límite de imágenes por propiedad (máximo 20)
-                var countImagenes = await _imagenRepository.GetCountByPropiedadAsync(createDto.IdPropiedad);
-                if (countImagenes >= 20)
+                // No permitir más base64 - debe usarse el endpoint /upload
+                if (!string.IsNullOrWhiteSpace(createDto.Url) && createDto.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
                     return new BaseResponseDto<ImagenPropiedadDto>
                     {
                         Success = false,
-                        Message = "Se ha alcanzado el límite máximo de 20 imágenes por propiedad."
+                        Message = "Use el endpoint /api/imagenpropiedad/upload para subir imágenes con archivo."
                     };
-                }
-
-                // Si la URL viene como data:image/...;base64,... -> guardarla en disco y reemplazar createDto.Url por la ruta pública
-                if (!string.IsNullOrWhiteSpace(createDto.Url) && createDto.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        createDto.Url = await SaveBase64ImageAsync(createDto.Url, tenantId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error al guardar imagen base64 para propiedad {PropiedadId}", createDto.IdPropiedad);
-                        return new BaseResponseDto<ImagenPropiedadDto>
-                        {
-                            Success = false,
-                            Message = "No se pudo guardar la imagen enviada en base64."
-                        };
-                    }
                 }
 
                 // Si no se especifica orden, asignar el siguiente disponible
@@ -238,50 +398,68 @@ namespace inmobiliariaApi.Services
             }
         }
 
-        // Guarda una imagen enviada como data URL base64 y devuelve la ruta pública (/uploads/...)
-        private async Task<string> SaveBase64ImageAsync(string dataUrl, int tenantId)
+        /// <summary>
+        /// Marcar una imagen como principal (solo puede haber una por propiedad)
+        /// </summary>
+        public async Task<BaseResponseDto<ImagenPropiedadDto>> HacerPrincipalAsync(int id, int tenantId)
         {
-            var m = Regex.Match(dataUrl, @"data:(?<mime>[\w\/\-\+\.]+);base64,(?<data>.+)");
-            if (!m.Success) throw new InvalidDataException("Formato de data URL inválido.");
-
-            var mime = m.Groups["mime"].Value.ToLowerInvariant();
-            var base64 = m.Groups["data"].Value;
-            string ext = mime switch
-            {
-                "image/png" => ".png",
-                "image/jpeg" => ".jpg",
-                "image/jpg" => ".jpg",
-                "image/gif" => ".gif",
-                _ => ".bin"
-            };
-
-            var uploadsFolder = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "propiedades", tenantId.ToString());
-            Directory.CreateDirectory(uploadsFolder);
-
-            var fileName = $"{Guid.NewGuid()}{ext}";
-            var filePath = Path.Combine(uploadsFolder, fileName);
-
-            var bytes = Convert.FromBase64String(base64);
-            await File.WriteAllBytesAsync(filePath, bytes);
-
-            // Ruta pública relativa
-            var publicUrl = $"/uploads/propiedades/{tenantId}/{fileName}";
-            return publicUrl;
-        }
-
-        // Borra un archivo guardado si existe (acepta rutas públicas /uploads/...)
-        public void DeleteFileByUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url)) return;
             try
             {
-                var relative = url.StartsWith("/") ? url.Substring(1) : url;
-                var possible = Path.Combine(_env.WebRootPath ?? "wwwroot", relative.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(possible)) File.Delete(possible);
+                var imagen = await _imagenRepository.GetByIdAndTenantAsync(id, tenantId);
+                if (imagen == null)
+                {
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = false,
+                        Message = "Imagen no encontrada en su organización."
+                    };
+                }
+
+                // Si ya es principal, no hacer nada
+                if (imagen.EsPrincipal)
+                {
+                    var responseDto = MapToResponseDto(imagen);
+                    return new BaseResponseDto<ImagenPropiedadDto>
+                    {
+                        Success = true,
+                        Data = responseDto,
+                        Message = "Esta imagen ya es la principal."
+                    };
+                }
+
+                // Obtener todas las imágenes de la propiedad
+                var imagenes = await _imagenRepository.GetByPropiedadAndTenantAsync(imagen.IdPropiedad, tenantId);
+
+                // Desmarcar la actual principal
+                foreach (var img in imagenes.Where(i => i.EsPrincipal))
+                {
+                    img.EsPrincipal = false;
+                    await _imagenRepository.UpdateAsync(img);
+                }
+
+                // Marcar la nueva como principal
+                imagen.EsPrincipal = true;
+                await _imagenRepository.UpdateAsync(imagen);
+
+                _logger.LogInformation("Imagen {Id} marcada como principal para propiedad {PropiedadId}", id, imagen.IdPropiedad);
+
+                var responseDtoResult = MapToResponseDto(imagen);
+                return new BaseResponseDto<ImagenPropiedadDto>
+                {
+                    Success = true,
+                    Data = responseDtoResult,
+                    Message = "Imagen marcada como principal."
+                };
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "No se pudo eliminar archivo por URL: {Url}", url);
+                _logger.LogError(ex, "Error al marcar imagen como principal: {Id} en tenant: {TenantId}", id, tenantId);
+                return new BaseResponseDto<ImagenPropiedadDto>
+                {
+                    Success = false,
+                    Message = "Error al actualizar la imagen.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
             }
         }
 
@@ -299,28 +477,18 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                var oldUrl = existingImagen.Url;
-                string? newUrl = null;
-
-                // Si la URL viene como data:, guardarla y usar la ruta pública
+                // No permitir base64 para actualizaciones - debe usarse el endpoint /upload
                 if (!string.IsNullOrWhiteSpace(updateDto.Url) && updateDto.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
-                    try
+                    return new BaseResponseDto<ImagenPropiedadDto>
                     {
-                        newUrl = await SaveBase64ImageAsync(updateDto.Url, tenantId);
-                        existingImagen.Url = newUrl;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error al guardar imagen base64 para actualización imagen {Id}", updateDto.Id);
-                        return new BaseResponseDto<ImagenPropiedadDto>
-                        {
-                            Success = false,
-                            Message = "No se pudo guardar la imagen enviada en base64."
-                        };
-                    }
+                        Success = false,
+                        Message = "No se pueden actualizar imágenes con base64. Use el endpoint /upload para subir nuevas imágenes."
+                    };
                 }
-                else if (!string.IsNullOrWhiteSpace(updateDto.Url))
+
+                // Solo actualizar orden si se proporciona URL
+                if (!string.IsNullOrWhiteSpace(updateDto.Url))
                 {
                     existingImagen.Url = updateDto.Url.Trim();
                 }
@@ -329,13 +497,11 @@ namespace inmobiliariaApi.Services
 
                 await _imagenRepository.UpdateAsync(existingImagen);
 
-                // Si se permite eliminar el archivo antiguo y es distinto, borrarlo
-                if (deleteOldFile && !string.IsNullOrWhiteSpace(oldUrl) && !string.IsNullOrWhiteSpace(existingImagen.Url)
-                    && !string.Equals(oldUrl, existingImagen.Url, StringComparison.OrdinalIgnoreCase)
-                    && oldUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
-                {
-                    DeleteFileByUrl(oldUrl);
-                }
+                // R2 cleanup: no necesario, R2 maneja su propio almacenamiento
+                // if (deleteOldFile && !string.IsNullOrWhiteSpace(oldUrl) && existingImagen.R2Key != null)
+                // {
+                //     await _r2Service.DeleteAsync(existingImagen.R2Key);
+                // }
 
                 var updatedImagen = await _imagenRepository.GetByIdAndTenantAsync(existingImagen.Id, tenantId);
                 var responseDto = MapToResponseDto(updatedImagen ?? existingImagen);
@@ -373,15 +539,23 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                var urlToDelete = imagen.Url;
+                var r2Key = imagen.R2Key;
 
-                // Eliminación física de registro (DB)
+                // Eliminación de registro en BD
                 await _imagenRepository.DeleteAsync(id);
 
-                // Si se solicita, eliminar archivo físico
-                if (deleteFile && !string.IsNullOrWhiteSpace(urlToDelete) && urlToDelete.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+                // Eliminar de R2 si existe key
+                if (deleteFile && !string.IsNullOrWhiteSpace(r2Key))
                 {
-                    DeleteFileByUrl(urlToDelete);
+                    try
+                    {
+                        await _r2Service.DeleteAsync(r2Key);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error al eliminar archivo de R2: {R2Key}", r2Key);
+                        // No fallar la operación si R2 falla, ya que el registro fue eliminado de BD
+                    }
                 }
 
                 _logger.LogInformation("Imagen ID: {Id} eliminada en tenant: {TenantId}", id, tenantId);
@@ -389,7 +563,7 @@ namespace inmobiliariaApi.Services
                 return new BaseResponseDto<object>
                 {
                     Success = true,
-                    Data = urlToDelete,
+                    Data = new { id, r2Key },
                     Message = "Imagen eliminada correctamente."
                 };
             }

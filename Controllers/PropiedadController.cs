@@ -91,142 +91,126 @@ namespace inmobiliariaApi.Controllers
         }
 
         [HttpPost]
+        [Consumes("application/json", "multipart/form-data")]
         [Authorize(Roles = "Administrador,Supervisor")]
-        public async Task<IActionResult> Create([FromBody] CreatePropiedadDto createDto)
+        public async Task<IActionResult> Create()
         {
-            if (!ModelState.IsValid)
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-                return BadRequest(new { Success = false, Message = "Datos no válidos.", Errors = errors });
-            }
-
             var tenantId = GetTenantId();
-
             if (tenantId <= 0)
-            {
                 return BadRequest(new { Success = false, Message = "Tenant no válido." });
+
+            // Parsear DTO: acepta JSON puro o multipart con campo "propiedadJson"
+            CreatePropiedadDto? createDto = null;
+            List<IFormFile> archivos = new();
+
+            if (Request.HasJsonContentType())
+            {
+                createDto = await Request.ReadFromJsonAsync<CreatePropiedadDto>();
+            }
+            else if (Request.HasFormContentType)
+            {
+                var form = await Request.ReadFormAsync();
+                var json = form["propiedadJson"].FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(json))
+                    return BadRequest(new { Success = false, Message = "Falta el campo 'propiedadJson' en el formulario." });
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                createDto = JsonSerializer.Deserialize<CreatePropiedadDto>(json, options);
+                archivos = form.Files.Where(f => f.Length > 0).ToList();
             }
 
-            // Validaciones adicionales
+            if (createDto == null)
+                return BadRequest(new { Success = false, Message = "No se pudo leer el cuerpo de la solicitud." });
+
             if (string.IsNullOrWhiteSpace(createDto.Titulo))
-            {
                 return BadRequest(new { Success = false, Message = "El título es obligatorio." });
-            }
-
             if (string.IsNullOrWhiteSpace(createDto.Descripcion))
-            {
                 return BadRequest(new { Success = false, Message = "La descripción es obligatoria." });
-            }
-
             if (string.IsNullOrWhiteSpace(createDto.Direccion))
-            {
                 return BadRequest(new { Success = false, Message = "La dirección es obligatoria." });
-            }
-
-            // Validación de precio: siempre debe ser mayor a 0 si se proporciona
             if (createDto.Precio.HasValue && createDto.Precio.Value <= 0)
-            {
                 return BadRequest(new { Success = false, Message = "El precio debe ser mayor a 0." });
-            }
 
-            // Validar latitud y longitud si se proporcionan
-            if (createDto.Latitud.HasValue && (createDto.Latitud.Value < -90 || createDto.Latitud.Value > 90))
-            {
-                return BadRequest(new { Success = false, Message = "La latitud debe estar entre -90 y 90." });
-            }
-
-            if (createDto.Longitud.HasValue && (createDto.Longitud.Value < -180 || createDto.Longitud.Value > 180))
-            {
-                return BadRequest(new { Success = false, Message = "La longitud debe estar entre -180 y 180." });
-            }
-
-            // Asignar automáticamente el tenant del usuario autenticado
-            // NO tomar el IdInmobiliaria del DTO, siempre usar el del tenant
             createDto.IdInmobiliaria = tenantId;
 
-            // Iniciar transacción: si falla la creación de cualquier imagen, hacemos rollback de todo
-            using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+            // Transacción: si falla cualquier imagen, se hace rollback de la BD
+            // (las imágenes ya subidas a R2 se eliminan manualmente)
+            var r2KeysSubidas = new List<string>();
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                // lista de urls físicas públicas creadas para limpieza en caso de error
-                var createdImageUrls = new List<string>();
-
-                try
+                var response = await _propiedadService.CreatePropiedadAsync(createDto);
+                if (!response.Success)
                 {
-                    var response = await _propiedadService.CreatePropiedadAsync(createDto);
-                    if (!response.Success)
-                    {
-                        await transaction.RollbackAsync();
-                        return BadRequest(response);
-                    }
-
-                    // Procesar imágenes si vienen
-                    var imagesResult = new
-                    {
-                        Created = new List<object>(),
-                        Errors = new List<string>()
-                    };
-
-                    var createdPropiedadId = response.Data?.Id ?? 0;
-                    if (createdPropiedadId > 0 && createDto.Imagenes != null && createDto.Imagenes.Any())
-                    {
-                        int orden = 1;
-                        foreach (var url in createDto.Imagenes)
-                        {
-                            if (string.IsNullOrWhiteSpace(url))
-                            {
-                                imagesResult.Errors.Add("URL de imagen vacía ignorada.");
-                                continue;
-                            }
-
-                            var createImgDto = new CreateImagenPropiedadDto
-                            {
-                                IdPropiedad = createdPropiedadId,
-                                Url = url.Trim(),
-                                Orden = orden++
-                            };
-
-                            var imgResp = await _imagenService.CreateImagenAsync(createImgDto, tenantId);
-                            if (imgResp.Success)
-                            {
-                                var savedUrl = imgResp.Data?.Url;
-                                if (!string.IsNullOrWhiteSpace(savedUrl))
-                                    createdImageUrls.Add(savedUrl); // track para limpieza en caso de fallo posterior
-
-                                imagesResult.Created.Add(new { Id = imgResp.Data?.Id, Url = imgResp.Data?.Url });
-                            }
-                            else
-                            {
-                                // limpiar archivos creados hasta ahora
-                                foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
-                                await transaction.RollbackAsync();
-                                return BadRequest(new
-                                {
-                                    Success = false,
-                                    Message = "No se pudieron guardar las imágenes. Operación cancelada.",
-                                    ImagenError = imgResp.Message,
-                                    Detalles = imgResp.Errors
-                                });
-                            }
-                        }
-                    }
-
-                    // Commit si todo salió bien
-                    await transaction.CommitAsync();
-
-                    // Devolver la creación de la propiedad y resultado de imágenes
-                    return CreatedAtAction(nameof(GetById), new { id = response.Data?.Id }, new
-                    {
-                        Property = response,
-                        Images = imagesResult
-                    });
-                }
-                catch (Exception ex)
-                {
-                    // limpiar archivos creados si hay excepción
-                    foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
                     await transaction.RollbackAsync();
-                    return StatusCode(500, new { Success = false, Message = "Error interno al crear propiedad e imágenes.", Detalle = ex.Message });
+                    return BadRequest(response);
                 }
+
+                var propiedadId = response.Data!.Id;
+                var imagenesCreadas = new List<object>();
+
+                if (archivos.Any())
+                {
+                    var tiposPermitidos = new[] { "image/jpeg", "image/jpg", "image/png", "image/webp" };
+                    const long maxSize = 5 * 1024 * 1024;
+                    int orden = 1;
+
+                    foreach (var archivo in archivos)
+                    {
+                        if (!tiposPermitidos.Contains(archivo.ContentType?.ToLowerInvariant() ?? ""))
+                        {
+                            await RollbackR2(r2KeysSubidas);
+                            await transaction.RollbackAsync();
+                            return BadRequest(new { Success = false, Message = $"Archivo '{archivo.FileName}': formato no permitido (jpg, png, webp)." });
+                        }
+                        if (archivo.Length > maxSize)
+                        {
+                            await RollbackR2(r2KeysSubidas);
+                            await transaction.RollbackAsync();
+                            return BadRequest(new { Success = false, Message = $"Archivo '{archivo.FileName}': supera el límite de 5MB." });
+                        }
+
+                        var r2Key = _imagenService.GenerateR2Key(tenantId, propiedadId, archivo.FileName);
+                        string publicUrl;
+                        await using (var stream = archivo.OpenReadStream())
+                            publicUrl = await _imagenService.SubirArchivoR2Async(stream, r2Key, archivo.ContentType!);
+
+                        r2KeysSubidas.Add(r2Key);
+
+                        var esPrincipal = orden == 1 && !imagenesCreadas.Any();
+                        var uploadDto = new UploadImagenDto { IdPropiedad = propiedadId, Archivo = archivo };
+                        var imgResult = await _imagenService.CrearRegistroImagenAsync(propiedadId, publicUrl, r2Key, orden++, esPrincipal);
+
+                        if (!imgResult.Success)
+                        {
+                            await RollbackR2(r2KeysSubidas);
+                            await transaction.RollbackAsync();
+                            return BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
+                        }
+                        imagenesCreadas.Add(new { imgResult.Data!.Id, imgResult.Data.Url });
+                    }
+                }
+
+                await transaction.CommitAsync();
+                return CreatedAtAction(nameof(GetById), new { id = propiedadId }, new
+                {
+                    Property = response,
+                    Images = new { Created = imagenesCreadas, Errors = new List<string>() }
+                });
+            }
+            catch (Exception ex)
+            {
+                await RollbackR2(r2KeysSubidas);
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { Success = false, Message = "Error interno al crear propiedad.", Detalle = ex.Message });
+            }
+        }
+
+        private async Task RollbackR2(List<string> keys)
+        {
+            foreach (var key in keys)
+            {
+                try { await _imagenService.EliminarArchivoR2Async(key); } catch { /* ignorar errores de cleanup */ }
             }
         }
 
@@ -367,7 +351,8 @@ namespace inmobiliariaApi.Controllers
                             if (!updResp.Success)
                             {
                                 // limpiar archivos creados hasta ahora
-                                foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
+                                // R2 cleanup: no necesario, R2 maneja su propio almacenamiento
+                                // foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
                                 await transaction.RollbackAsync();
                                 return BadRequest(new { Success = false, Message = $"No se pudo actualizar la imagen ID {imgUp.Id}.", Detalle = updResp.Message });
                             }
@@ -414,7 +399,8 @@ namespace inmobiliariaApi.Controllers
                             if (!imgResp.Success)
                             {
                                 // limpiar archivos creados hasta ahora
-                                foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
+                                // R2 cleanup: no necesario, R2 maneja su propio almacenamiento
+                                // foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
                                 await transaction.RollbackAsync();
                                 return BadRequest(new { Success = false, Message = "No se pudieron agregar las imágenes.", Detalle = imgResp.Message });
                             }
@@ -428,10 +414,11 @@ namespace inmobiliariaApi.Controllers
                     await transaction.CommitAsync();
 
                     // Borrar físicamente las URLs antiguas (si correspondiera)
-                    foreach (var oldUrl in oldUrlsToDeleteAfterCommit)
-                    {
-                        _imagenService.DeleteFileByUrl(oldUrl);
-                    }
+                    // R2 cleanup: no necesario, R2 maneja su propio almacenamiento
+                    // foreach (var oldUrl in oldUrlsToDeleteAfterCommit)
+                    // {
+                    //     _imagenService.DeleteFileByUrl(oldUrl);
+                    // }
 
                     return Ok(propResponse);
                 }
@@ -439,7 +426,8 @@ namespace inmobiliariaApi.Controllers
                 {
                     // limpiar archivos creados si hay excepción
                     await transaction.RollbackAsync();
-                    foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
+                    // R2 cleanup: no necesario, R2 maneja su propio almacenamiento
+                    // foreach (var u in createdImageUrls) _imagenService.DeleteFileByUrl(u);
                     return StatusCode(500, new { Success = false, Message = "Error interno al actualizar propiedad e imágenes." });
                 }
             }
