@@ -12,7 +12,6 @@ namespace inmobiliariaApi.Data
         public DbSet<Usuario> Usuario { get; set; }
         public DbSet<ImagenPropiedad> ImagenPropiedad { get; set; }
         public DbSet<Rol> Rol { get; set; }
-        public DbSet<Usuario> Usuarios { get; set; }
 
         // Nuevas entidades para el módulo de Leads
         public DbSet<Inmobiliaria> Inmobiliaria { get; set; }
@@ -35,6 +34,8 @@ namespace inmobiliariaApi.Data
         public DbSet<Localidad> Localidades { get; set; }
         public DbSet<UsuarioWeb> UsuariosWeb { get; set; }
         public DbSet<PropiedadFavorita> PropiedadesFavoritas { get; set; }
+        public DbSet<TransaccionHistorial> TransaccionesHistorial { get; set; }
+        public DbSet<TipoTransaccion> TiposTransaccion { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) // Mapeo de tablas y relaciones

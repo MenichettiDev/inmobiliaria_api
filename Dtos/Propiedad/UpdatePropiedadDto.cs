@@ -37,6 +37,7 @@ namespace inmobiliariaApi.DTOs.Propiedad
 
         // El IdInmobiliaria NO se puede cambiar y NO viene del usuario
         public int? IdInmobiliaria { get; set; }
+        public long? IdLocalidad { get; set; }
 
         // Imágenes: agregar (URLs o data-urls), eliminar (ids) y actualizar (id + url + orden)
         public List<string>? ImagenesParaAgregar { get; set; } = new List<string>();

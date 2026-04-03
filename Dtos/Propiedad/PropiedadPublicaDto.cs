@@ -9,6 +9,8 @@ namespace inmobiliariaApi.DTOs.Propiedad
         public string Direccion { get; set; } = string.Empty;
         public decimal? Latitud { get; set; }
         public decimal? Longitud { get; set; }
+        public string? LocalidadNombre { get; set; }
+        public string? ProvinciaNombre { get; set; }
         public DateTime? PublicadaEn { get; set; }
 
         // Info de la inmobiliaria

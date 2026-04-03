@@ -41,6 +41,9 @@ namespace inmobiliariaApi.Services
                 IdEstadoOperativo = propiedad.IdEstadoOperativo,
                 EstadoAdminNombre = propiedad.EstadoAdmin?.Descripcion,
                 EstadoOperativoNombre = propiedad.EstadoOperativo?.Descripcion,
+                IdLocalidad = propiedad.IdLocalidad,
+                LocalidadNombre = propiedad.Localidad?.Nombre,
+                ProvinciaNombre = propiedad.Localidad?.Provincia?.Nombre,
                 // Mapear imágenes relacionadas (si existen)
                 Imagenes = propiedad.Imagenes?.Select(i => new ImagenPropiedadDto
                 {
@@ -67,6 +70,8 @@ namespace inmobiliariaApi.Services
                 Direccion = propiedad.Direccion,
                 Latitud = propiedad.Latitud,
                 Longitud = propiedad.Longitud,
+                LocalidadNombre = propiedad.Localidad?.Nombre,
+                ProvinciaNombre = propiedad.Localidad?.Provincia?.Nombre,
                 PublicadaEn = propiedad.PublicadaEn,
                 IdInmobiliaria = propiedad.IdInmobiliaria,
                 InmobiliariaNombre = propiedad.Inmobiliaria?.Nombre ?? string.Empty,
@@ -187,6 +192,7 @@ namespace inmobiliariaApi.Services
                     Longitud = createDto.Longitud,
                     IdInmobiliaria = createDto.IdInmobiliaria, // Viene del tenant del controller
                     IdAgenteResponsable = createDto.IdAgenteResponsable,
+                    IdLocalidad = createDto.IdLocalidad, // agregado
                     IdEstadoAdmin = 1, // Por defecto activa
                     IdEstadoOperativo = 1, // Por defecto disponible
                     CreadoEn = DateTime.UtcNow,
@@ -284,6 +290,9 @@ namespace inmobiliariaApi.Services
 
                 if (updateDto.IdEstadoOperativo.HasValue)
                     existingPropiedad.IdEstadoOperativo = updateDto.IdEstadoOperativo.Value;
+
+                if (updateDto.IdLocalidad.HasValue)
+                    existingPropiedad.IdLocalidad = updateDto.IdLocalidad.Value;
 
                 // NO permitir cambio de inmobiliaria - mantener siempre el tenant original
                 existingPropiedad.IdInmobiliaria = tenantId;

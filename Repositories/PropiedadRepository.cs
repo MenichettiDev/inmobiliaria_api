@@ -20,6 +20,8 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes) // agregado
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
@@ -30,6 +32,8 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes) // agregado
                 .FirstOrDefaultAsync(p => p.Id == id && p.IdInmobiliaria == tenantId);
         }
@@ -42,6 +46,8 @@ namespace inmobiliariaApi.Repositories
                 .Include(p => p.AgenteResponsable)
                 .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes) // agregado
                 .Where(p => p.IdInmobiliaria == tenantId);
 
@@ -113,6 +119,8 @@ namespace inmobiliariaApi.Repositories
         {
             var query = _dbSet
                 .Include(p => p.Inmobiliaria)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes)
                 .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1);
 
@@ -146,6 +154,8 @@ namespace inmobiliariaApi.Repositories
         {
             var query = _dbSet
                 .Include(p => p.Inmobiliaria)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes)
                 .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1 && p.Inmobiliaria!.Subdominio == subdominio);
 
@@ -178,6 +188,8 @@ namespace inmobiliariaApi.Repositories
         {
             return await _dbSet
                 .Include(p => p.Inmobiliaria)
+                .Include(p => p.Localidad) // agregado
+                    .ThenInclude(l => l!.Provincia) // agregado
                 .Include(p => p.Imagenes)
                 .FirstOrDefaultAsync(p => p.Id == id && p.EsPublicada && p.IdEstadoAdmin == 1);
         }
