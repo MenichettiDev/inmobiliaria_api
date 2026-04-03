@@ -58,7 +58,21 @@ builder.Services.AddCors(options =>
                         return true;
                     }
 
-                    // Permitir dominios de producción
+                    // Docker local: frontend en puerto 4200 → nginx en :80
+                    if (origin.Equals("http://localhost:80", StringComparison.OrdinalIgnoreCase) ||
+                        origin.Equals("http://localhost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Dominio de producción: centroinmo.com y subdominios
+                    if (origin.Equals("https://centroinmo.com", StringComparison.OrdinalIgnoreCase) ||
+                        origin.EndsWith(".centroinmo.com", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Dominio anterior (mantener por compatibilidad)
                     if (origin.Contains("buscopropiedades.com.ar", StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
@@ -242,7 +256,12 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        new MariaDbServerVersion(new Version(10, 4, 32))
+        new MariaDbServerVersion(new Version(10, 11)),
+        mySqlOptions => mySqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null
+        )
     )
 );
 
@@ -299,7 +318,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Solo usar redirección HTTPS si no estamos en un contenedor Docker local o si estamos en Prod real
+if (!app.Environment.IsDevelopment() && Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") != "true")
+{
+    app.UseHttpsRedirection();
+}
 // Aplica la política de CORS después de autenticación pero antes de autorización
 app.UseCors("AllowFrontend");
 
@@ -344,6 +367,11 @@ app.MapGet(
         }
     )
     .WithName("GetWeatherForecast")
+    .WithOpenApi();
+
+// Health check endpoint
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }))
+    .WithName("Health")
     .WithOpenApi();
 
 app.MapControllers(); // esto es para habilitar los enroutadores de los controladores

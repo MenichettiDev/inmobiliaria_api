@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+.git/
+.gitignore
+README.md
+.github/
+**/*.md
+Postman_Collection.json
+inmobiliaria_api.http
+appsettings.Development.json

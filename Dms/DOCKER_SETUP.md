@@ -183,7 +183,7 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copiar aplicación compilada
-COPY --from=build /app/dist/pyre/browser /usr/share/nginx/html
+COPY --from=build /app/dist/inmobiliaria/browser /usr/share/nginx/html
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
