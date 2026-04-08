@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System;
 using System.Text.Json; // añadida
+using Microsoft.Extensions.Logging;
 
 namespace inmobiliariaApi.Controllers
 {
@@ -21,13 +22,15 @@ namespace inmobiliariaApi.Controllers
         private readonly PropiedadService _propiedadService;
         private readonly ImagenPropiedadService _imagenService; // nueva dependencia
         private readonly ApplicationDbContext _dbContext; // nueva dependencia
+        private readonly ILogger<PropiedadController> _logger; // nueva dependencia
 
-        // Constructor actualizado para recibir ApplicationDbContext
-        public PropiedadController(PropiedadService propiedadService, ImagenPropiedadService imagenService, ApplicationDbContext dbContext)
+        // Constructor actualizado para recibir ApplicationDbContext e ILogger
+        public PropiedadController(PropiedadService propiedadService, ImagenPropiedadService imagenService, ApplicationDbContext dbContext, ILogger<PropiedadController> logger)
         {
             _propiedadService = propiedadService;
             _imagenService = imagenService;
             _dbContext = dbContext;
+            _logger = logger;
         }
 
         private int GetTenantId()
@@ -276,10 +279,17 @@ namespace inmobiliariaApi.Controllers
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 updateDto = JsonSerializer.Deserialize<UpdatePropiedadDto>(jsonContent, options);
 
-                // Attach uploaded files (if any) to the DTO
+                if (updateDto == null)
+                {
+                    return BadRequest(new { Success = false, Message = "Datos no válidos." });
+                }
+
+                // Attach uploaded files (if any) to the DTO - estos se procesarán igual que en POST
                 if (form.Files?.Count > 0)
                 {
                     updateDto.ImagenesFiles = form.Files.ToList();
+                    // Limpiar ImagenesParaAgregar para no procesar data URLs
+                    updateDto.ImagenesParaAgregar = null;
                 }
             }
             catch (JsonException)
@@ -299,22 +309,7 @@ namespace inmobiliariaApi.Controllers
             if (id != updateDto.Id)
                 return BadRequest(new { Success = false, Message = "ID no coincide." });
 
-            // If files were uploaded, convert to data-URL base64 and add to ImagenesParaAgregar
-            if (updateDto.ImagenesFiles != null && updateDto.ImagenesFiles.Any())
-            {
-                updateDto.ImagenesParaAgregar ??= new List<string>();
-                foreach (var formFile in updateDto.ImagenesFiles)
-                {
-                    if (formFile == null || formFile.Length == 0) continue;
-                    using var ms = new MemoryStream();
-                    await formFile.CopyToAsync(ms);
-                    var bytes = ms.ToArray();
-                    var base64 = Convert.ToBase64String(bytes);
-                    var dataUrl = $"data:{formFile.ContentType};base64,{base64}";
-                    updateDto.ImagenesParaAgregar.Add(dataUrl);
-                }
-            }
-
+            // Los archivos en ImagenesFiles se procesarán directamente como en POST (no convertir a base64)
             // Forzar que mantenga el mismo tenant
             updateDto.IdInmobiliaria = tenantId;
 
@@ -395,8 +390,8 @@ namespace inmobiliariaApi.Controllers
                             }
                         }
 
-                        // 3) Agregar nuevas imágenes
-                        if (updateDto.ImagenesParaAgregar != null && updateDto.ImagenesParaAgregar.Any())
+                        // 3) Agregar nuevas imágenes (directamente de los archivos, igual que en POST)
+                        if (updateDto.ImagenesFiles != null && updateDto.ImagenesFiles.Any())
                         {
                             int orden = 1;
                             try
@@ -407,26 +402,42 @@ namespace inmobiliariaApi.Controllers
                             }
                             catch { orden = 1; }
 
-                            foreach (var url in updateDto.ImagenesParaAgregar)
-                            {
-                                if (string.IsNullOrWhiteSpace(url)) continue;
-                                var createImgDto = new CreateImagenPropiedadDto
-                                {
-                                    IdPropiedad = propResponse.Data!.Id,
-                                    Url = url.Trim(),
-                                    Orden = orden++
-                                };
+                            var tiposPermitidos = new[] { "image/jpeg", "image/jpg", "image/png", "image/webp" };
+                            const long maxSize = 5 * 1024 * 1024;
 
-                                var imgResp = await _imagenService.CreateImagenAsync(createImgDto, tenantId);
-                                if (!imgResp.Success)
+                            foreach (var archivo in updateDto.ImagenesFiles)
+                            {
+                                if (archivo == null || archivo.Length == 0) continue;
+
+                                if (!tiposPermitidos.Contains(archivo.ContentType?.ToLowerInvariant() ?? ""))
                                 {
                                     await transaction.RollbackAsync();
-                                    updateResult = BadRequest(new { Success = false, Message = "No se pudieron agregar las imágenes.", Detalle = imgResp.Message });
+                                    updateResult = BadRequest(new { Success = false, Message = $"Archivo '{archivo.FileName}': formato no permitido (jpg, png, webp)." });
                                     return;
                                 }
-                                var savedUrl = imgResp.Data?.Url;
-                                if (!string.IsNullOrWhiteSpace(savedUrl))
-                                    createdImageUrls.Add(savedUrl);
+                                if (archivo.Length > maxSize)
+                                {
+                                    await transaction.RollbackAsync();
+                                    updateResult = BadRequest(new { Success = false, Message = $"Archivo '{archivo.FileName}': supera el límite de 5MB." });
+                                    return;
+                                }
+
+                                // Subir a R2 igual que en POST
+                                var r2Key = _imagenService.GenerateR2Key(tenantId, propResponse.Data!.Id, archivo.FileName);
+                                string publicUrl;
+                                await using (var stream = archivo.OpenReadStream())
+                                    publicUrl = await _imagenService.SubirArchivoR2Async(stream, r2Key, archivo.ContentType!);
+
+                                // Crear registro en BD
+                                var imgResult = await _imagenService.CrearRegistroImagenAsync(propResponse.Data!.Id, publicUrl, r2Key, orden++, false);
+
+                                if (!imgResult.Success)
+                                {
+                                    await transaction.RollbackAsync();
+                                    updateResult = BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
+                                    return;
+                                }
+                                createdImageUrls.Add(publicUrl);
                             }
                         }
 
