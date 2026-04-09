@@ -26,6 +26,14 @@ namespace inmobiliariaApi.Models
         [Column("r2_key")]
         public string? R2Key { get; set; }
 
+        [MaxLength(500)]
+        [Column("thumbnail_url")]
+        public string? ThumbnailUrl { get; set; }
+
+        [MaxLength(500)]
+        [Column("thumbnail_key")]
+        public string? ThumbnailKey { get; set; }
+
         [Column("creado_en")]
         public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 

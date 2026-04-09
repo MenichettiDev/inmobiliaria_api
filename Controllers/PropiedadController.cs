@@ -139,7 +139,7 @@ namespace inmobiliariaApi.Controllers
 
             // Transacción: si falla cualquier imagen, se hace rollback de la BD
             // (las imágenes ya subidas a R2 se eliminan manualmente)
-            var r2KeysSubidas = new List<string>();
+            var r2KeysSubidas = new List<string>(); // Almacena tanto full keys como thumb keys
             IActionResult? actionResult = null;
 
             var strategy = _dbContext.Database.CreateExecutionStrategy();
@@ -188,25 +188,29 @@ namespace inmobiliariaApi.Controllers
                                     return;
                                 }
 
-                                var r2Key = _imagenService.GenerateR2Key(tenantId, propiedadId, archivo.FileName);
-                                string publicUrl;
-                                await using (var stream = archivo.OpenReadStream())
-                                    publicUrl = await _imagenService.SubirArchivoR2Async(stream, r2Key, archivo.ContentType!);
-
-                                r2KeysSubidas.Add(r2Key);
-
                                 var esPrincipal = orden == 1 && !imagenesCreadas.Any();
-                                var uploadDto = new UploadImagenDto { IdPropiedad = propiedadId, Archivo = archivo };
-                                var imgResult = await _imagenService.CrearRegistroImagenAsync(propiedadId, publicUrl, r2Key, orden++, esPrincipal);
 
-                                if (!imgResult.Success)
+                                await using (var stream = archivo.OpenReadStream())
                                 {
-                                    await RollbackR2(r2KeysSubidas);
-                                    await transaction.RollbackAsync();
-                                    actionResult = BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
-                                    return;
+                                    // Procesar y subir imagen (full + thumbnail)
+                                    var (fullUrl, fullKey, thumbUrl, thumbKey) = await _imagenService.ProcesarYSubirImagenAsync(
+                                        stream, archivo.ContentType!, tenantId, propiedadId, archivo.FileName);
+
+                                    r2KeysSubidas.Add(fullKey);
+                                    r2KeysSubidas.Add(thumbKey);
+
+                                    var imgResult = await _imagenService.CrearRegistroImagenAsync(
+                                        propiedadId, fullUrl, fullKey, orden++, esPrincipal, thumbUrl, thumbKey);
+
+                                    if (!imgResult.Success)
+                                    {
+                                        await RollbackR2(r2KeysSubidas);
+                                        await transaction.RollbackAsync();
+                                        actionResult = BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
+                                        return;
+                                    }
+                                    imagenesCreadas.Add(new { imgResult.Data!.Id, imgResult.Data.Url, imgResult.Data.ThumbnailUrl });
                                 }
-                                imagenesCreadas.Add(new { imgResult.Data!.Id, imgResult.Data.Url });
                             }
                         }
 
@@ -422,22 +426,24 @@ namespace inmobiliariaApi.Controllers
                                     return;
                                 }
 
-                                // Subir a R2 igual que en POST
-                                var r2Key = _imagenService.GenerateR2Key(tenantId, propResponse.Data!.Id, archivo.FileName);
-                                string publicUrl;
+                                // Procesar y subir a R2 igual que en POST
                                 await using (var stream = archivo.OpenReadStream())
-                                    publicUrl = await _imagenService.SubirArchivoR2Async(stream, r2Key, archivo.ContentType!);
-
-                                // Crear registro en BD
-                                var imgResult = await _imagenService.CrearRegistroImagenAsync(propResponse.Data!.Id, publicUrl, r2Key, orden++, false);
-
-                                if (!imgResult.Success)
                                 {
-                                    await transaction.RollbackAsync();
-                                    updateResult = BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
-                                    return;
+                                    var (fullUrl, fullKey, thumbUrl, thumbKey) = await _imagenService.ProcesarYSubirImagenAsync(
+                                        stream, archivo.ContentType!, tenantId, propResponse.Data!.Id, archivo.FileName);
+
+                                    // Crear registro en BD
+                                    var imgResult = await _imagenService.CrearRegistroImagenAsync(
+                                        propResponse.Data!.Id, fullUrl, fullKey, orden++, false, thumbUrl, thumbKey);
+
+                                    if (!imgResult.Success)
+                                    {
+                                        await transaction.RollbackAsync();
+                                        updateResult = BadRequest(new { Success = false, Message = "Error al guardar imagen en BD.", Detalle = imgResult.Message });
+                                        return;
+                                    }
+                                    createdImageUrls.Add(fullUrl);
                                 }
-                                createdImageUrls.Add(publicUrl);
                             }
                         }
 

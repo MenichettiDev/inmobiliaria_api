@@ -141,6 +141,7 @@ builder.Services.AddScoped<LocalidadService>();
 builder.Services.AddScoped<MercadoPagoService>();
 builder.Services.AddScoped<PlanGateService>();
 builder.Services.AddScoped<CloudflareR2Service>();
+builder.Services.AddSingleton<ImageProcessingService>();
 
 // HttpClient para MercadoPago
 builder.Services.AddHttpClient("MercadoPago", client =>

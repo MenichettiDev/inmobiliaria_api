@@ -5,6 +5,7 @@ namespace inmobiliariaApi.DTOs.ImagenPropiedad
         public int Id { get; set; }
         public int IdPropiedad { get; set; }
         public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
         public int Orden { get; set; }
         public bool EsPrincipal { get; set; }
         public string? R2Key { get; set; }
