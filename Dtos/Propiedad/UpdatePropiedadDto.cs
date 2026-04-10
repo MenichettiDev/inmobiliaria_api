@@ -32,7 +32,7 @@ namespace inmobiliariaApi.DTOs.Propiedad
         public decimal? Longitud { get; set; }
 
         public int? IdAgenteResponsable { get; set; }
-        public bool? Activo { get; set; }
+        public int? IdEstadoAdmin { get; set; }
         public int? IdEstadoOperativo { get; set; }
 
         // El IdInmobiliaria NO se puede cambiar y NO viene del usuario

@@ -18,7 +18,7 @@ namespace inmobiliariaApi.DTOs.Propiedad
         public int IdInmobiliaria { get; set; }
         public int? IdAgenteResponsable { get; set; }
         public string? AgenteResponsableNombre { get; set; }
-        public bool Activo { get; set; }
+        public int IdEstadoAdmin { get; set; }
         public int IdEstadoOperativo { get; set; }
         public string? EstadoAdminNombre { get; set; }
         public string? EstadoOperativoNombre { get; set; }

@@ -23,6 +23,7 @@ namespace inmobiliariaApi.Data
         public DbSet<FuenteContacto> FuenteContacto { get; set; }
         public DbSet<EstadoLead> EstadoLead { get; set; }
         public DbSet<EstadoPropiedadOperativo> EstadoPropiedadOperativo { get; set; }
+        public DbSet<EstadoPropiedadActividad> EstadoPropiedadActividad { get; set; }
         public DbSet<LeadEstadoHistorial> LeadEstadoHistorial { get; set; }
         public DbSet<UsoMensual> UsoMensual { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
@@ -152,6 +153,12 @@ namespace inmobiliariaApi.Data
                 .HasOne(p => p.EstadoOperativo)
                 .WithMany(e => e.Propiedades)
                 .HasForeignKey(p => p.IdEstadoOperativo)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Propiedad>()
+                .HasOne(p => p.EstadoAdmin)
+                .WithMany(e => e.Propiedades)
+                .HasForeignKey(p => p.IdEstadoAdmin)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // ImagenPropiedad -> Propiedad
