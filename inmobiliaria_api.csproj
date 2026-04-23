@@ -23,6 +23,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.*" />
   </ItemGroup>
 
 </Project>

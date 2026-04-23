@@ -15,18 +15,21 @@ namespace inmobiliariaApi.Services
         private readonly ILogger<ImagenPropiedadService> _logger;
         private readonly CloudflareR2Service _r2Service;
         private readonly PlanGateService _planGateService;
+        private readonly ImageProcessingService _imageProcessingService;
 
         public ImagenPropiedadService(
             ImagenPropiedadRepository imagenRepository,
             ILogger<ImagenPropiedadService> logger,
             CloudflareR2Service r2Service,
-            PlanGateService planGateService)
+            PlanGateService planGateService,
+            ImageProcessingService imageProcessingService)
             : base(imagenRepository)
         {
             _imagenRepository = imagenRepository;
             _logger = logger;
             _r2Service = r2Service;
             _planGateService = planGateService;
+            _imageProcessingService = imageProcessingService;
         }
 
         private ImagenPropiedadDto MapToResponseDto(ImagenPropiedad imagen)
@@ -36,6 +39,7 @@ namespace inmobiliariaApi.Services
                 Id = imagen.Id,
                 IdPropiedad = imagen.IdPropiedad,
                 Url = imagen.Url,
+                ThumbnailUrl = imagen.ThumbnailUrl,
                 Orden = imagen.Orden,
                 EsPrincipal = imagen.EsPrincipal,
                 R2Key = imagen.R2Key,
@@ -171,7 +175,7 @@ namespace inmobiliariaApi.Services
             => await _r2Service.DeleteAsync(key);
 
         public async Task<BaseResponseDto<ImagenPropiedadDto>> CrearRegistroImagenAsync(
-            int propiedadId, string url, string r2Key, int orden, bool esPrincipal)
+            int propiedadId, string url, string r2Key, int orden, bool esPrincipal, string? thumbnailUrl = null, string? thumbnailKey = null)
         {
             try
             {
@@ -180,6 +184,8 @@ namespace inmobiliariaApi.Services
                     IdPropiedad = propiedadId,
                     Url = url,
                     R2Key = r2Key,
+                    ThumbnailUrl = thumbnailUrl,
+                    ThumbnailKey = thumbnailKey,
                     Orden = orden,
                     EsPrincipal = esPrincipal,
                     CreadoEn = DateTime.UtcNow
@@ -195,6 +201,50 @@ namespace inmobiliariaApi.Services
             {
                 _logger.LogError(ex, "Error al crear registro de imagen en BD");
                 return new BaseResponseDto<ImagenPropiedadDto> { Success = false, Message = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Procesa la imagen (comprime y genera thumbnail), y sube ambas a R2
+        /// </summary>
+        public async Task<(string fullUrl, string fullKey, string thumbUrl, string thumbKey)> ProcesarYSubirImagenAsync(
+            Stream input, string contentType, int tenantId, int propiedadId, string fileName)
+        {
+            try
+            {
+                // Leer el archivo en memoria para procesarlo dos veces
+                using var memoryStream = new MemoryStream();
+                await input.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+
+                // Comprimir imagen full
+                using var compressedStream = await _imageProcessingService.ComprimirAsync(memoryStream, contentType);
+
+                // Generar key para full image
+                var fullKey = _r2Service.GenerateKey(tenantId, propiedadId, fileName);
+
+                // Subir imagen comprimida
+                var fullUrl = await _r2Service.UploadAsync(compressedStream, fullKey, "image/webp");
+
+                // Generar thumbnail desde el mismo memory stream reseteado
+                memoryStream.Position = 0;
+                using var thumbStream = await _imageProcessingService.GenerarThumbnailAsync(memoryStream);
+
+                // Generar key para thumbnail
+                var thumbFileName = $"thumb_{Path.GetFileNameWithoutExtension(fileName)}";
+                var thumbKey = _r2Service.GenerateKey(tenantId, propiedadId, thumbFileName);
+
+                // Subir thumbnail
+                var thumbUrl = await _r2Service.UploadAsync(thumbStream, thumbKey, "image/webp");
+
+                _logger.LogInformation("Imagen procesada y subida: Full={FullKey}, Thumb={ThumbKey}", fullKey, thumbKey);
+
+                return (fullUrl, fullKey, thumbUrl, thumbKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al procesar y subir imagen");
+                throw;
             }
         }
 
@@ -265,12 +315,11 @@ namespace inmobiliariaApi.Services
 
                 try
                 {
-                    // Generar key y subir a R2
-                    var r2Key = _r2Service.GenerateKey(propiedad.IdInmobiliaria, uploadDto.IdPropiedad, uploadDto.Archivo.FileName);
-
                     await using (var stream = uploadDto.Archivo.OpenReadStream())
                     {
-                        var publicUrl = await _r2Service.UploadAsync(stream, r2Key, uploadDto.Archivo.ContentType);
+                        // Procesar y subir imagen (full + thumbnail)
+                        var (fullUrl, fullKey, thumbUrl, thumbKey) = await ProcesarYSubirImagenAsync(
+                            stream, uploadDto.Archivo.ContentType, propiedad.IdInmobiliaria, uploadDto.IdPropiedad, uploadDto.Archivo.FileName);
 
                         // Verificar si es la primera imagen (marcar como principal)
                         var countImagenes = await _imagenRepository.GetCountByPropiedadAsync(uploadDto.IdPropiedad);
@@ -280,19 +329,21 @@ namespace inmobiliariaApi.Services
                         var maxOrden = await _imagenRepository.GetMaxOrdenByPropiedadAsync(uploadDto.IdPropiedad);
                         var nuevoOrden = maxOrden + 1;
 
-                        // Crear registro en BD
+                        // Crear registro en BD con ambas URLs
                         var imagen = new ImagenPropiedad
                         {
                             IdPropiedad = uploadDto.IdPropiedad,
-                            Url = publicUrl,
-                            R2Key = r2Key,
+                            Url = fullUrl,
+                            R2Key = fullKey,
+                            ThumbnailUrl = thumbUrl,
+                            ThumbnailKey = thumbKey,
                             Orden = nuevoOrden,
                             EsPrincipal = esPrincipal,
                             CreadoEn = DateTime.UtcNow
                         };
 
                         var result = await _imagenRepository.AddAsync(imagen);
-                        _logger.LogInformation("Imagen subida exitosamente con ID: {Id}, Key: {R2Key}", result.Id, r2Key);
+                        _logger.LogInformation("Imagen subida exitosamente con ID: {Id}, Key: {R2Key}, ThumbKey: {ThumbKey}", result.Id, fullKey, thumbKey);
 
                         var imagenConDetalles = await _imagenRepository.GetByIdWithDetailsAsync(result.Id);
                         var responseDto = MapToResponseDto(imagenConDetalles ?? result);
@@ -540,30 +591,46 @@ namespace inmobiliariaApi.Services
                 }
 
                 var r2Key = imagen.R2Key;
+                var thumbKey = imagen.ThumbnailKey;
 
                 // Eliminación de registro en BD
                 await _imagenRepository.DeleteAsync(id);
 
-                // Eliminar de R2 si existe key
-                if (deleteFile && !string.IsNullOrWhiteSpace(r2Key))
+                // Eliminar de R2 si existen keys
+                if (deleteFile)
                 {
-                    try
+                    if (!string.IsNullOrWhiteSpace(r2Key))
                     {
-                        await _r2Service.DeleteAsync(r2Key);
+                        try
+                        {
+                            await _r2Service.DeleteAsync(r2Key);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Error al eliminar archivo de R2: {R2Key}", r2Key);
+                            // No fallar la operación si R2 falla, ya que el registro fue eliminado de BD
+                        }
                     }
-                    catch (Exception ex)
+
+                    if (!string.IsNullOrWhiteSpace(thumbKey))
                     {
-                        _logger.LogWarning(ex, "Error al eliminar archivo de R2: {R2Key}", r2Key);
-                        // No fallar la operación si R2 falla, ya que el registro fue eliminado de BD
+                        try
+                        {
+                            await _r2Service.DeleteAsync(thumbKey);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Error al eliminar thumbnail de R2: {ThumbKey}", thumbKey);
+                        }
                     }
                 }
 
-                _logger.LogInformation("Imagen ID: {Id} eliminada en tenant: {TenantId}", id, tenantId);
+                _logger.LogInformation("Imagen ID: {Id} eliminada en tenant: {TenantId} (R2Key: {R2Key}, ThumbKey: {ThumbKey})", id, tenantId, r2Key, thumbKey);
 
                 return new BaseResponseDto<object>
                 {
                     Success = true,
-                    Data = new { id, r2Key },
+                    Data = new { id, r2Key, thumbKey },
                     Message = "Imagen eliminada correctamente."
                 };
             }

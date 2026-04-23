@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using inmobiliariaApi.Data;
 
@@ -10,9 +11,11 @@ using inmobiliariaApi.Data;
 namespace inmobiliaria_api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260408212645_AddThumbnailToImagenPropiedad")]
+    partial class AddThumbnailToImagenPropiedad
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -711,13 +714,13 @@ namespace inmobiliaria_api.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("es_publicada");
 
-                    b.Property<bool>("Activo")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("activo");
-
                     b.Property<int?>("IdAgenteResponsable")
                         .HasColumnType("int")
                         .HasColumnName("id_agente_responsable");
+
+                    b.Property<int>("IdEstadoAdmin")
+                        .HasColumnType("int")
+                        .HasColumnName("id_estado_admin");
 
                     b.Property<int>("IdEstadoOperativo")
                         .HasColumnType("int")
@@ -752,6 +755,8 @@ namespace inmobiliaria_api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("IdAgenteResponsable");
+
+                    b.HasIndex("IdEstadoAdmin");
 
                     b.HasIndex("IdEstadoOperativo");
 
@@ -1343,6 +1348,12 @@ namespace inmobiliaria_api.Migrations
                         .HasForeignKey("IdAgenteResponsable")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("inmobiliariaApi.Models.EstadoPropiedadActividad", "EstadoAdmin")
+                        .WithMany("Propiedades")
+                        .HasForeignKey("IdEstadoAdmin")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("inmobiliariaApi.Models.EstadoPropiedadOperativo", "EstadoOperativo")
                         .WithMany("Propiedades")
                         .HasForeignKey("IdEstadoOperativo")
@@ -1361,6 +1372,8 @@ namespace inmobiliaria_api.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AgenteResponsable");
+
+                    b.Navigation("EstadoAdmin");
 
                     b.Navigation("EstadoOperativo");
 
@@ -1516,6 +1529,11 @@ namespace inmobiliaria_api.Migrations
                     b.Navigation("HistorialEstadosNuevos");
 
                     b.Navigation("Leads");
+                });
+
+            modelBuilder.Entity("inmobiliariaApi.Models.EstadoPropiedadActividad", b =>
+                {
+                    b.Navigation("Propiedades");
                 });
 
             modelBuilder.Entity("inmobiliariaApi.Models.EstadoPropiedadOperativo", b =>
