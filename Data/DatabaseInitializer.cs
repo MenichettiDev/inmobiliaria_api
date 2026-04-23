@@ -42,6 +42,17 @@ namespace inmobiliariaApi.Data
                     logger.LogWarning("No se pudo crear/verificar refresh_tokens (posiblemente falte tabla usuarios): {Message}", ex.Message);
                 }
 
+                // 1b. Columnas thumbnail en imagenes_propiedades
+                try {
+                    await context.Database.ExecuteSqlRawAsync(@"
+                        ALTER TABLE `imagenes_propiedades`
+                            ADD COLUMN IF NOT EXISTS `thumbnail_url` varchar(500) NULL,
+                            ADD COLUMN IF NOT EXISTS `thumbnail_key` varchar(500) NULL;
+                    ");
+                } catch (Exception ex) {
+                    logger.LogWarning("No se pudo agregar columnas thumbnail a imagenes_propiedades: {Message}", ex.Message);
+                }
+
                 // 2. Tabla: pagos_suscripcion
                 try {
                     await context.Database.ExecuteSqlRawAsync(@"

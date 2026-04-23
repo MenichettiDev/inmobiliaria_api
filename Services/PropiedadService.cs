@@ -561,7 +561,8 @@ namespace inmobiliariaApi.Services
         // ===== MÉTODOS PÚBLICOS (SIN AUTENTICACIÓN) =====
 
         public async Task<BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>> GetPublicadasCrossTenantPagedAsync(
-            int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+            int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null,
+            int? idInmobiliaria = null, long? idProvincia = null)
         {
             try
             {
@@ -569,7 +570,7 @@ namespace inmobiliariaApi.Services
                 if (pageSize <= 0) pageSize = 10;
 
                 var (propiedades, totalRecords) = await _propiedadRepository.GetPublicadasCrossTenantPagedAsync(
-                    page, pageSize, titulo, precioMin, precioMax);
+                    page, pageSize, titulo, precioMin, precioMax, idInmobiliaria, idProvincia);
 
                 var propiedadesDto = propiedades.Select(MapToPublicDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
@@ -605,7 +606,8 @@ namespace inmobiliariaApi.Services
         }
 
         public async Task<BaseResponseDto<PaginatedResponseDto<PropiedadPublicaDto>>> GetPublicadasBySubdominioPagedAsync(
-            string subdominio, int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null)
+            string subdominio, int page, int pageSize, string? titulo = null, decimal? precioMin = null, decimal? precioMax = null,
+            int? idInmobiliaria = null, long? idProvincia = null)
         {
             try
             {
@@ -613,7 +615,7 @@ namespace inmobiliariaApi.Services
                 if (pageSize <= 0) pageSize = 10;
 
                 var (propiedades, totalRecords) = await _propiedadRepository.GetPublicadasBySubdominioPagedAsync(
-                    subdominio, page, pageSize, titulo, precioMin, precioMax);
+                    subdominio, page, pageSize, titulo, precioMin, precioMax, idInmobiliaria, idProvincia);
 
                 var propiedadesDto = propiedades.Select(MapToPublicDto).ToList();
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
@@ -643,6 +645,32 @@ namespace inmobiliariaApi.Services
                 {
                     Success = false,
                     Message = "No se pudieron cargar las propiedades.",
+                    Errors = new List<string> { "Error interno del servidor." }
+                };
+            }
+        }
+
+        public async Task<BaseResponseDto<PublicFiltrosDto>> GetPublicFiltrosOpcionesAsync()
+        {
+            try
+            {
+                var (inmobiliarias, provincias) = await _propiedadRepository.GetPublicFiltrosOpcionesAsync();
+
+                var dto = new PublicFiltrosDto
+                {
+                    Inmobiliarias = inmobiliarias.Select(x => new FiltroOpcionDto { Id = x.Id, Nombre = x.Nombre, Cantidad = x.Count }).ToList(),
+                    Provincias = provincias.Select(x => new FiltroOpcionDto { Id = x.Id, Nombre = x.Nombre, Cantidad = x.Count }).ToList()
+                };
+
+                return new BaseResponseDto<PublicFiltrosDto> { Success = true, Data = dto, Message = "Filtros obtenidos" };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener opciones de filtros públicos");
+                return new BaseResponseDto<PublicFiltrosDto>
+                {
+                    Success = false,
+                    Message = "Error al obtener filtros.",
                     Errors = new List<string> { "Error interno del servidor." }
                 };
             }
