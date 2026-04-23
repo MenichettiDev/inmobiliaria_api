@@ -155,12 +155,6 @@ namespace inmobiliariaApi.Data
                 .HasForeignKey(p => p.IdEstadoOperativo)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Propiedad>()
-                .HasOne(p => p.EstadoAdmin)
-                .WithMany(e => e.Propiedades)
-                .HasForeignKey(p => p.IdEstadoAdmin)
-                .OnDelete(DeleteBehavior.Restrict);
-
             // ImagenPropiedad -> Propiedad
             modelBuilder.Entity<ImagenPropiedad>()
                 .HasOne(i => i.Propiedad)

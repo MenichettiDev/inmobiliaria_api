@@ -204,18 +204,6 @@ namespace inmobiliariaApi.Controllers
                 return BadRequest(new { Success = false, Message = "No se pueden eliminar los estados básicos del sistema (activa/eliminada)." });
             }
 
-            // Verificar que no haya propiedades usando este estado
-            var estadoConPropiedades = await _estadoRepository.FindAsync(e => e.Id == id);
-            var estadoCompleto = estadoConPropiedades.FirstOrDefault();
-            if (estadoCompleto != null && estadoCompleto.Propiedades.Any())
-            {
-                // En lugar de eliminar físicamente, ocultar
-                estadoCompleto.Visible = false;
-                await _estadoRepository.UpdateAsync(estadoCompleto);
-                return Ok(new { Success = true, Message = "Estado ocultado correctamente (hay propiedades que lo usan)." });
-            }
-
-            // Si no hay propiedades usando este estado, eliminar físicamente
             await _estadoRepository.DeleteAsync(id);
             return Ok(new { Success = true, Message = "Estado de actividad eliminado correctamente" });
         }

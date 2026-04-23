@@ -37,9 +37,8 @@ namespace inmobiliariaApi.Services
                 IdInmobiliaria = propiedad.IdInmobiliaria,
                 IdAgenteResponsable = propiedad.IdAgenteResponsable,
                 AgenteResponsableNombre = propiedad.AgenteResponsable?.Nombre,
-                IdEstadoAdmin = propiedad.IdEstadoAdmin,
+                Activo = propiedad.Activo,
                 IdEstadoOperativo = propiedad.IdEstadoOperativo,
-                EstadoAdminNombre = propiedad.EstadoAdmin?.Descripcion,
                 EstadoOperativoNombre = propiedad.EstadoOperativo?.Descripcion,
                 IdLocalidad = propiedad.IdLocalidad,
                 LocalidadNombre = propiedad.Localidad?.Nombre,
@@ -193,7 +192,7 @@ namespace inmobiliariaApi.Services
                     IdInmobiliaria = createDto.IdInmobiliaria, // Viene del tenant del controller
                     IdAgenteResponsable = createDto.IdAgenteResponsable,
                     IdLocalidad = createDto.IdLocalidad, // agregado
-                    IdEstadoAdmin = 1, // Por defecto activa
+                    Activo = true, // Por defecto activa
                     IdEstadoOperativo = 1, // Por defecto disponible
                     CreadoEn = DateTime.UtcNow,
                     ActualizadoEn = DateTime.UtcNow
@@ -286,7 +285,7 @@ namespace inmobiliariaApi.Services
                 }
 
                 if (updateDto.IdEstadoAdmin.HasValue)
-                    existingPropiedad.IdEstadoAdmin = updateDto.IdEstadoAdmin.Value;
+                    existingPropiedad.Activo = updateDto.IdEstadoAdmin.Value == 1;
 
                 if (updateDto.IdEstadoOperativo.HasValue)
                     existingPropiedad.IdEstadoOperativo = updateDto.IdEstadoOperativo.Value;
@@ -340,7 +339,7 @@ namespace inmobiliariaApi.Services
                 }
 
                 // Verificar que la propiedad no esté ya inactiva
-                if (propiedad.IdEstadoAdmin == 0)
+                if (!propiedad.Activo)
                 {
                     return new BaseResponseDto<object>
                     {
@@ -349,8 +348,8 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                // ELIMINACIÓN LÓGICA ÚNICAMENTE - cambiar estado administrativo a inactivo (0)
-                propiedad.IdEstadoAdmin = 0; // Estado inactivo
+                // ELIMINACIÓN LÓGICA ÚNICAMENTE
+                propiedad.Activo = false;
                 propiedad.ActualizadoEn = DateTime.UtcNow;
 
                 // NO usar el método DeleteAsync del repositorio base, solo UpdateAsync
@@ -392,7 +391,7 @@ namespace inmobiliariaApi.Services
                 }
 
                 // Si ya está activa, retornar mensaje adecuado
-                if (propiedad.IdEstadoAdmin == 1)
+                if (propiedad.Activo)
                 {
                     return new BaseResponseDto<object>
                     {
@@ -401,7 +400,7 @@ namespace inmobiliariaApi.Services
                     };
                 }
 
-                propiedad.IdEstadoAdmin = 1; // Activar
+                propiedad.Activo = true;
                 propiedad.ActualizadoEn = DateTime.UtcNow;
 
                 await _propiedadRepository.UpdateAsync(propiedad);

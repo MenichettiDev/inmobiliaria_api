@@ -18,11 +18,10 @@ namespace inmobiliariaApi.Repositories
         {
             return await _dbSet
                 .Include(p => p.AgenteResponsable)
-                .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
-                .Include(p => p.Imagenes) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
+                .Include(p => p.Imagenes)
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 
@@ -30,11 +29,10 @@ namespace inmobiliariaApi.Repositories
         {
             return await _dbSet
                 .Include(p => p.AgenteResponsable)
-                .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
-                .Include(p => p.Imagenes) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
+                .Include(p => p.Imagenes)
                 .FirstOrDefaultAsync(p => p.Id == id && p.IdInmobiliaria == tenantId);
         }
 
@@ -44,11 +42,10 @@ namespace inmobiliariaApi.Repositories
         {
             var query = _dbSet
                 .Include(p => p.AgenteResponsable)
-                .Include(p => p.EstadoAdmin)
                 .Include(p => p.EstadoOperativo)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
-                .Include(p => p.Imagenes) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
+                .Include(p => p.Imagenes)
                 .Where(p => p.IdInmobiliaria == tenantId);
 
             if (!string.IsNullOrEmpty(titulo))
@@ -63,7 +60,8 @@ namespace inmobiliariaApi.Repositories
 
             if (estadoAdmin.HasValue)
             {
-                query = query.Where(p => p.IdEstadoAdmin == estadoAdmin.Value);
+                // estadoAdmin: 1 = activo, cualquier otro = inactivo
+                query = query.Where(p => p.Activo == (estadoAdmin.Value == 1));
             }
 
             if (estadoOperativo.HasValue)
@@ -100,7 +98,7 @@ namespace inmobiliariaApi.Repositories
         public async Task<List<Propiedad>> GetPropiedadesComboAsync(int tenantId)
         {
             return await _dbSet
-                .Where(p => p.IdInmobiliaria == tenantId && p.IdEstadoAdmin == 1)
+                .Where(p => p.IdInmobiliaria == tenantId && p.Activo)
                 .OrderBy(p => p.Titulo)
                 .Select(p => new Propiedad
                 {
@@ -119,10 +117,10 @@ namespace inmobiliariaApi.Repositories
         {
             var query = _dbSet
                 .Include(p => p.Inmobiliaria)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
                 .Include(p => p.Imagenes)
-                .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1);
+                .Where(p => p.EsPublicada && p.Activo);
 
             if (!string.IsNullOrEmpty(titulo))
             {
@@ -154,10 +152,10 @@ namespace inmobiliariaApi.Repositories
         {
             var query = _dbSet
                 .Include(p => p.Inmobiliaria)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
                 .Include(p => p.Imagenes)
-                .Where(p => p.EsPublicada && p.IdEstadoAdmin == 1 && p.Inmobiliaria!.Subdominio == subdominio);
+                .Where(p => p.EsPublicada && p.Activo && p.Inmobiliaria!.Subdominio == subdominio);
 
             if (!string.IsNullOrEmpty(titulo))
             {
@@ -188,10 +186,10 @@ namespace inmobiliariaApi.Repositories
         {
             return await _dbSet
                 .Include(p => p.Inmobiliaria)
-                .Include(p => p.Localidad) // agregado
-                    .ThenInclude(l => l!.Provincia) // agregado
+                .Include(p => p.Localidad)
+                    .ThenInclude(l => l!.Provincia)
                 .Include(p => p.Imagenes)
-                .FirstOrDefaultAsync(p => p.Id == id && p.EsPublicada && p.IdEstadoAdmin == 1);
+                .FirstOrDefaultAsync(p => p.Id == id && p.EsPublicada && p.Activo);
         }
     }
 }

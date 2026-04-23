@@ -19,8 +19,6 @@ namespace inmobiliariaApi.Models
 
         public bool Visible { get; set; } = true;
 
-        // Navigation properties
-        public virtual ICollection<Propiedad> Propiedades { get; set; } = new List<Propiedad>();
     }
 }
 

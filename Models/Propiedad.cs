@@ -49,8 +49,8 @@ namespace inmobiliariaApi.Models
         [Column("actualizado_en")]
         public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 
-        [Column("id_estado_admin")]
-        public int IdEstadoAdmin { get; set; } = 1;
+        [Column("activo")]
+        public bool Activo { get; set; } = true;
 
         [Column("id_estado_operativo")]
         public int IdEstadoOperativo { get; set; } = 1;
@@ -66,9 +66,6 @@ namespace inmobiliariaApi.Models
 
         [ForeignKey("IdAgenteResponsable")]
         public virtual Usuario? AgenteResponsable { get; set; }
-
-        [ForeignKey("IdEstadoAdmin")]
-        public virtual EstadoPropiedadActividad? EstadoAdmin { get; set; }
 
         [ForeignKey("IdEstadoOperativo")]
         public virtual EstadoPropiedadOperativo? EstadoOperativo { get; set; }
